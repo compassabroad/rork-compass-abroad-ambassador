@@ -12,8 +12,9 @@ import {
   Alert,
   Linking,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
-import { X, User, Mail, Phone, Link2, Copy, MessageCircle, Share2, Check } from 'lucide-react-native';
+import { X, User, Mail, Phone, Link2, Copy, MessageCircle, Share2, Check, ChevronLeft } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { MOCK_CURRENT_AMBASSADOR } from '@/mocks/data';
 
@@ -102,16 +103,20 @@ export default function AmbassadorInviteModal({ visible, onClose }: AmbassadorIn
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
-      <KeyboardAvoidingView 
-        style={styles.container} 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
-        <View style={styles.header}>
-          <Text style={styles.title}>Elçi Davet Et</Text>
-          <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
-            <X size={24} color={Colors.text} />
-          </TouchableOpacity>
-        </View>
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <KeyboardAvoidingView 
+          style={styles.keyboardView} 
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <View style={styles.header}>
+            <TouchableOpacity onPress={handleClose} style={styles.backButton}>
+              <ChevronLeft size={24} color={Colors.text} />
+            </TouchableOpacity>
+            <Text style={styles.title}>Elçi Davet Et</Text>
+            <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
+              <X size={24} color={Colors.text} />
+            </TouchableOpacity>
+          </View>
 
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
           <View style={styles.referralCodeCard}>
@@ -215,7 +220,8 @@ export default function AmbassadorInviteModal({ visible, onClose }: AmbassadorIn
 
           <View style={{ height: 100 }} />
         </ScrollView>
-      </KeyboardAvoidingView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
     </Modal>
   );
 }
@@ -225,14 +231,24 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
+  keyboardView: {
+    flex: 1,
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
-    paddingTop: 16,
+    padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   title: {
     fontSize: 20,
