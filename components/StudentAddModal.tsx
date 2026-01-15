@@ -31,16 +31,39 @@ export interface NewStudent {
   notes: string;
 }
 
-const COUNTRIES = [
-  { code: 'USA', name: 'Amerika' },
-  { code: 'UK', name: 'İngiltere' },
-  { code: 'Canada', name: 'Kanada' },
-  { code: 'Germany', name: 'Almanya' },
-  { code: 'Netherlands', name: 'Hollanda' },
-  { code: 'Malta', name: 'Malta' },
-  { code: 'Ireland', name: 'İrlanda' },
-  { code: 'Switzerland', name: 'İsviçre' },
+const COUNTRY_GROUPS = [
+  {
+    region: 'Avrupa',
+    countries: [
+      { code: 'Italy', name: 'İtalya' },
+      { code: 'Germany', name: 'Almanya' },
+      { code: 'Spain', name: 'İspanya' },
+      { code: 'Netherlands', name: 'Hollanda' },
+      { code: 'France', name: 'Fransa' },
+      { code: 'OtherEurope', name: 'Diğer Avrupa' },
+    ],
+  },
+  {
+    region: 'Diğer Ülkeler',
+    countries: [
+      { code: 'UK', name: 'İngiltere' },
+      { code: 'Ireland', name: 'İrlanda' },
+      { code: 'Canada', name: 'Kanada' },
+      { code: 'USA', name: 'Amerika' },
+      { code: 'Malta', name: 'Malta' },
+      { code: 'Dubai', name: 'Dubai' },
+      { code: 'Australia', name: 'Avustralya' },
+      { code: 'NewZealand', name: 'Yeni Zelanda' },
+      { code: 'Thailand', name: 'Tayland' },
+      { code: 'Singapore', name: 'Singapur' },
+      { code: 'Japan', name: 'Japonya' },
+      { code: 'SouthKorea', name: 'Güney Kore' },
+      { code: 'China', name: 'Çin' },
+    ],
+  },
 ];
+
+const ALL_COUNTRIES = COUNTRY_GROUPS.flatMap(g => g.countries);
 
 export default function StudentAddModal({ visible, onClose, onSubmit }: StudentAddModalProps) {
   const [name, setName] = useState('');
@@ -103,7 +126,7 @@ export default function StudentAddModal({ visible, onClose, onSubmit }: StudentA
   };
 
   const selectedProgram = PROGRAMS.find(p => p.id === program);
-  const selectedCountry = COUNTRIES.find(c => c.code === country);
+  const selectedCountry = ALL_COUNTRIES.find(c => c.code === country);
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
@@ -214,22 +237,29 @@ export default function StudentAddModal({ visible, onClose, onSubmit }: StudentA
               <ChevronDown size={20} color={Colors.textMuted} />
             </TouchableOpacity>
             {showCountryPicker && (
-              <View style={styles.pickerOptions}>
-                {COUNTRIES.map((c) => (
-                  <TouchableOpacity
-                    key={c.code}
-                    style={[styles.pickerOption, country === c.code && styles.pickerOptionSelected]}
-                    onPress={() => {
-                      setCountry(c.code);
-                      setShowCountryPicker(false);
-                    }}
-                  >
-                    <Text style={[styles.pickerOptionText, country === c.code && styles.pickerOptionTextSelected]}>
-                      {c.name}
-                    </Text>
-                  </TouchableOpacity>
+              <ScrollView style={styles.pickerOptionsScroll} nestedScrollEnabled>
+                {COUNTRY_GROUPS.map((group) => (
+                  <View key={group.region}>
+                    <View style={styles.regionHeader}>
+                      <Text style={styles.regionTitle}>{group.region}</Text>
+                    </View>
+                    {group.countries.map((c) => (
+                      <TouchableOpacity
+                        key={c.code}
+                        style={[styles.pickerOption, country === c.code && styles.pickerOptionSelected]}
+                        onPress={() => {
+                          setCountry(c.code);
+                          setShowCountryPicker(false);
+                        }}
+                      >
+                        <Text style={[styles.pickerOptionText, country === c.code && styles.pickerOptionTextSelected]}>
+                          {c.name}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
                 ))}
-              </View>
+              </ScrollView>
             )}
           </View>
 
@@ -349,6 +379,26 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
     overflow: 'hidden',
+  },
+  pickerOptionsScroll: {
+    backgroundColor: Colors.surfaceElevated,
+    borderRadius: 12,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    maxHeight: 280,
+  },
+  regionHeader: {
+    backgroundColor: Colors.primary + '40',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  regionTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.secondary,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
   },
   pickerOption: {
     padding: 14,
