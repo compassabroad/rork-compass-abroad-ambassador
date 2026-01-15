@@ -158,6 +158,55 @@ export interface Conversation {
   messages: Message[];
 }
 
+export type UserRole = 'ambassador' | 'admin';
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  ambassadorId?: string;
+}
+
+export type ApprovalStatus = 'pending' | 'approved' | 'rejected';
+
+export interface PendingAmbassador {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  registrationDate: string;
+  status: ApprovalStatus;
+  referredBy?: string;
+}
+
+export interface ProgramCommission {
+  programId: ProgramType;
+  defaultCommissionUSD: number;
+  exchangeRate: number;
+}
+
+export interface AmbassadorCommission {
+  ambassadorId: string;
+  programId: ProgramType;
+  customCommissionUSD: number | null;
+  useCustom: boolean;
+}
+
+export type AvailabilityStatus = 'available' | 'busy';
+
+export interface TeamMember {
+  id: string;
+  name: string;
+  title: string;
+  expertiseAreas: ProgramType[];
+  languages: string[];
+  availability: AvailabilityStatus;
+  email: string;
+  phone: string;
+  avatar?: string;
+}
+
 export interface StudentPipelineStage {
   stage: StudentStage;
   date: string | null;

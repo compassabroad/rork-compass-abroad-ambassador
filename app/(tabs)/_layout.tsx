@@ -1,11 +1,14 @@
 import { Tabs } from "expo-router";
-import { LayoutDashboard, Users, Network, Wallet, MessageCircle } from "lucide-react-native";
+import { LayoutDashboard, Users, Network, Wallet, MessageCircle, Shield, UsersRound } from "lucide-react-native";
 import React from "react";
 import { Platform } from "react-native";
 
 import Colors from "@/constants/colors";
+import { MOCK_CURRENT_USER } from "@/mocks/data";
 
 export default function TabLayout() {
+  const isAdmin = MOCK_CURRENT_USER.role === 'admin';
+
   return (
     <Tabs
       screenOptions={{
@@ -58,6 +61,21 @@ export default function TabLayout() {
         options={{
           title: "Mesajlar",
           tabBarIcon: ({ color, size }) => <MessageCircle color={color} size={size} />,
+        }}
+      />
+      <Tabs.Screen
+        name="team"
+        options={{
+          title: "Ekip",
+          tabBarIcon: ({ color, size }) => <UsersRound color={color} size={size} />,
+        }}
+      />
+      <Tabs.Screen
+        name="admin"
+        options={{
+          title: "Admin",
+          tabBarIcon: ({ color, size }) => <Shield color={color} size={size} />,
+          href: isAdmin ? undefined : null,
         }}
       />
       <Tabs.Screen

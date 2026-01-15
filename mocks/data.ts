@@ -1,4 +1,4 @@
-import { Student, Program, Ambassador, Earnings, ProgramType, Transaction, Notification, Conversation } from '@/types';
+import { Student, Program, Ambassador, Earnings, ProgramType, Transaction, Notification, Conversation, User, PendingAmbassador, ProgramCommission, AmbassadorCommission, TeamMember } from '@/types';
 
 export const PROGRAMS: Program[] = [
   {
@@ -696,4 +696,141 @@ export const getUnreadNotificationsCount = (): number => {
 
 export const getTotalUnreadMessages = (): number => {
   return MOCK_CONVERSATIONS.reduce((acc, conv) => acc + conv.unreadCount, 0);
+};
+
+export const MOCK_CURRENT_USER: User = {
+  id: 'admin1',
+  name: 'Admin Kullanıcı',
+  email: 'admin@compassabroad.com',
+  role: 'admin',
+  ambassadorId: 'current',
+};
+
+export const MOCK_PENDING_AMBASSADORS: PendingAmbassador[] = [
+  {
+    id: 'pending1',
+    name: 'Aylin Kara',
+    email: 'aylin@email.com',
+    phone: '+90 532 111 2233',
+    registrationDate: '2024-01-20',
+    status: 'pending',
+    referredBy: 'CA-7X9K2M',
+  },
+  {
+    id: 'pending2',
+    name: 'Kerem Yıldırım',
+    email: 'kerem@email.com',
+    phone: '+90 533 222 3344',
+    registrationDate: '2024-01-21',
+    status: 'pending',
+  },
+  {
+    id: 'pending3',
+    name: 'Sude Aksoy',
+    email: 'sude@email.com',
+    phone: '+90 534 333 4455',
+    registrationDate: '2024-01-22',
+    status: 'pending',
+    referredBy: 'CA-M3N8P2',
+  },
+  {
+    id: 'pending4',
+    name: 'Efe Türkmen',
+    email: 'efe@email.com',
+    phone: '+90 535 444 5566',
+    registrationDate: '2024-01-23',
+    status: 'pending',
+  },
+];
+
+export const MOCK_PROGRAM_COMMISSIONS: ProgramCommission[] = [
+  { programId: 'camp_usa', defaultCommissionUSD: 250, exchangeRate: 32.0 },
+  { programId: 'university', defaultCommissionUSD: 800, exchangeRate: 32.0 },
+  { programId: 'masters', defaultCommissionUSD: 1000, exchangeRate: 32.0 },
+  { programId: 'high_school', defaultCommissionUSD: 600, exchangeRate: 32.0 },
+  { programId: 'language_school', defaultCommissionUSD: 200, exchangeRate: 32.0 },
+  { programId: 'au_pair', defaultCommissionUSD: 350, exchangeRate: 32.0 },
+  { programId: 'work_travel', defaultCommissionUSD: 300, exchangeRate: 32.0 },
+  { programId: 'internship', defaultCommissionUSD: 400, exchangeRate: 32.0 },
+  { programId: 'summer_camp', defaultCommissionUSD: 150, exchangeRate: 32.0 },
+  { programId: 'boarding_school', defaultCommissionUSD: 700, exchangeRate: 32.0 },
+  { programId: 'foundation', defaultCommissionUSD: 500, exchangeRate: 32.0 },
+];
+
+export const MOCK_AMBASSADOR_COMMISSIONS: AmbassadorCommission[] = [
+  { ambassadorId: 'sub1', programId: 'camp_usa', customCommissionUSD: 280, useCustom: true },
+  { ambassadorId: 'sub1', programId: 'university', customCommissionUSD: 900, useCustom: true },
+  { ambassadorId: 'sub1', programId: 'masters', customCommissionUSD: null, useCustom: false },
+  { ambassadorId: 'sub3', programId: 'work_travel', customCommissionUSD: 350, useCustom: true },
+];
+
+export const MOCK_TEAM_MEMBERS: TeamMember[] = [
+  {
+    id: 'team1',
+    name: 'Elif Yılmaz',
+    title: 'Kıdemli Eğitim Danışmanı',
+    expertiseAreas: ['university', 'masters', 'foundation'],
+    languages: ['Türkçe', 'İngilizce', 'Almanca'],
+    availability: 'available',
+    email: 'elif.yilmaz@compassabroad.com',
+    phone: '+90 212 555 0101',
+  },
+  {
+    id: 'team2',
+    name: 'Murat Demir',
+    title: 'Amerika Programları Uzmanı',
+    expertiseAreas: ['camp_usa', 'work_travel', 'summer_camp'],
+    languages: ['Türkçe', 'İngilizce'],
+    availability: 'busy',
+    email: 'murat.demir@compassabroad.com',
+    phone: '+90 212 555 0102',
+  },
+  {
+    id: 'team3',
+    name: 'Zehra Kaya',
+    title: 'Lise Programları Danışmanı',
+    expertiseAreas: ['high_school', 'boarding_school'],
+    languages: ['Türkçe', 'İngilizce', 'Fransızca'],
+    availability: 'available',
+    email: 'zehra.kaya@compassabroad.com',
+    phone: '+90 212 555 0103',
+  },
+  {
+    id: 'team4',
+    name: 'Can Aksoy',
+    title: 'Dil Okulları Koordinatörü',
+    expertiseAreas: ['language_school', 'summer_camp'],
+    languages: ['Türkçe', 'İngilizce', 'İspanyolca'],
+    availability: 'available',
+    email: 'can.aksoy@compassabroad.com',
+    phone: '+90 212 555 0104',
+  },
+  {
+    id: 'team5',
+    name: 'Selin Öztürk',
+    title: 'Au Pair & Staj Danışmanı',
+    expertiseAreas: ['au_pair', 'internship'],
+    languages: ['Türkçe', 'İngilizce', 'Hollandaca'],
+    availability: 'busy',
+    email: 'selin.ozturk@compassabroad.com',
+    phone: '+90 212 555 0105',
+  },
+  {
+    id: 'team6',
+    name: 'Burak Şen',
+    title: 'Vize İşlemleri Uzmanı',
+    expertiseAreas: ['university', 'masters', 'high_school', 'work_travel'],
+    languages: ['Türkçe', 'İngilizce'],
+    availability: 'available',
+    email: 'burak.sen@compassabroad.com',
+    phone: '+90 212 555 0106',
+  },
+];
+
+export const getAllAmbassadors = (): Ambassador[] => {
+  return [MOCK_CURRENT_AMBASSADOR, ...MOCK_SUB_AMBASSADORS];
+};
+
+export const getAmbassadorById = (id: string): Ambassador | undefined => {
+  return getAllAmbassadors().find(a => a.id === id);
 };
