@@ -19,12 +19,12 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 
 import Colors from '@/constants/colors';
+import { useExchangeRate } from '@/contexts/ExchangeRateContext';
 import {
   PROGRAMS,
   MOCK_PROGRAM_COMMISSIONS,
   MOCK_AMBASSADOR_COMMISSIONS,
   getAmbassadorById,
-  MOCK_EARNINGS,
 } from '@/mocks/data';
 import { AMBASSADOR_TYPE_LABELS, ProgramType } from '@/types';
 
@@ -41,7 +41,7 @@ export default function AmbassadorCommissionsScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const ambassador = getAmbassadorById(id || '');
-  const exchangeRate = MOCK_EARNINGS.exchangeRate;
+  const { rate: exchangeRate } = useExchangeRate();
 
   const initialState = useMemo(() => {
     const state: CommissionState = {};

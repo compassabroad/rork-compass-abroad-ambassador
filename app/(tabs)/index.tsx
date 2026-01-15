@@ -38,6 +38,7 @@ import NotificationBell from '@/components/NotificationBell';
 import HowItWorksModal from '@/components/HowItWorksModal';
 
 import Colors from '@/constants/colors';
+import { useExchangeRate } from '@/contexts/ExchangeRateContext';
 import { MOCK_EARNINGS, MOCK_STUDENTS, MOCK_CURRENT_AMBASSADOR, PROGRAMS, MOCK_SOCIAL_MEDIA_LINKS } from '@/mocks/data';
 import { SocialMediaLinks, STAGE_LABELS, AMBASSADOR_TYPE_LABELS } from '@/types';
 
@@ -45,7 +46,6 @@ export default function DashboardScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
-  const [exchangeRate, setExchangeRate] = useState(MOCK_EARNINGS.exchangeRate);
   const [fadeAnim] = useState(() => new Animated.Value(0));
   
   const [showStudentModal, setShowStudentModal] = useState(false);
@@ -53,7 +53,8 @@ export default function DashboardScreen() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showHowItWorksModal, setShowHowItWorksModal] = useState(false);
   const [socialLinks] = useState<SocialMediaLinks>(MOCK_SOCIAL_MEDIA_LINKS);
-  const [isLoadingRate, setIsLoadingRate] = useState(false);
+  
+  const { rate: exchangeRate, isLoading: isLoadingRate, fetchRate, formattedRate, lastUpdatedText } = useExchangeRate();
 
   const handleAddStudent = (student: NewStudent) => {
     console.log('New student added:', student);
@@ -69,24 +70,7 @@ export default function DashboardScreen() {
       duration: 600,
       useNativeDriver: true,
     }).start();
-    fetchExchangeRate();
   }, [fadeAnim]);
-
-  const fetchExchangeRate = async () => {
-    setIsLoadingRate(true);
-    try {
-      const response = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
-      const data = await response.json();
-      if (data && data.rates && data.rates.TRY) {
-        setExchangeRate(data.rates.TRY);
-        console.log('Exchange rate fetched:', data.rates.TRY);
-      }
-    } catch (error) {
-      console.log('Failed to fetch exchange rate, using default:', error);
-    } finally {
-      setIsLoadingRate(false);
-    }
-  };
 
   const handleSocialPress = async (url: string) => {
     try {
@@ -104,8 +88,8 @@ export default function DashboardScreen() {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await fetchExchangeRate();
-    setRefreshing(false);
+    fetchRate();
+    setTimeout(() => setRefreshing(false), 1000);
   };
 
   const formatCurrency = (amount: number, currency: 'USD' | 'TRY') => {
@@ -149,11 +133,15 @@ export default function DashboardScreen() {
           </View>
           
           <View style={styles.exchangeRateContainer}>
-            <Text style={styles.exchangeRateLabel}>Döviz Kuru</Text>
             <View style={styles.exchangeRateRow}>
-              <Text style={styles.exchangeRate}>1 USD = ₺{exchangeRate.toFixed(2)}</Text>
-              {isLoadingRate && <RefreshCw size={14} color={Colors.secondary} />}
+              <Text style={styles.exchangeRateLabel}>Canlı Kur: </Text>
+              <Text style={styles.exchangeRate}>{formattedRate}</Text>
+              <Text style={styles.exchangeRateTime}> • Son: {lastUpdatedText}</Text>
+              {isLoadingRate && <RefreshCw size={14} color={Colors.secondary} style={{ marginLeft: 8 }} />}
             </View>
+            <TouchableOpacity onPress={fetchRate} style={styles.refreshRateButton}>
+              <RefreshCw size={16} color={Colors.secondary} />
+            </TouchableOpacity>
           </View>
         </Animated.View>
       </LinearGradient>
@@ -190,7 +178,7 @@ export default function DashboardScreen() {
               <View style={styles.earningsDivider} />
               <View style={styles.earningsRow}>
                 <Text style={styles.earningsCurrency}>TRY</Text>
-                <Text style={styles.earningsValueTRY}>{formatCurrency(MOCK_EARNINGS.totalTRY, 'TRY')}</Text>
+                <Text style={styles.earningsValueTRY}>{formatCurrency(MOCK_EARNINGS.totalUSD * exchangeRate, 'TRY')}</Text>
               </View>
             </View>
 
@@ -198,7 +186,7 @@ export default function DashboardScreen() {
               <View style={styles.earningsSubItem}>
                 <Clock size={14} color={Colors.warning} />
                 <Text style={styles.earningsSubLabel}>Bekleyen</Text>
-                <Text style={styles.earningsSubValue}>{formatCurrency(MOCK_EARNINGS.pendingUSD, 'USD')}</Text>
+                <Text style={styles.earningsSubValue}>{formatCurrency(MOCK_EARNINGS.pendingUSD, 'USD')} / {formatCurrency(MOCK_EARNINGS.pendingUSD * exchangeRate, 'TRY')}</Text>
               </View>
               <View style={styles.earningsSubItem}>
                 <TrendingUp size={14} color={Colors.success} />
@@ -439,10 +427,14 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   exchangeRateContainer: {
-    marginTop: 20,
+    marginTop: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    justifyContent: 'space-between',
+    backgroundColor: Colors.surface + '80',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
   },
   exchangeRateLabel: {
     fontSize: 12,
@@ -451,12 +443,22 @@ const styles = StyleSheet.create({
   exchangeRateRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    flexWrap: 'wrap',
+    flex: 1,
   },
   exchangeRate: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600' as const,
     color: Colors.secondary,
+  },
+  exchangeRateTime: {
+    fontSize: 12,
+    color: Colors.textMuted,
+  },
+  refreshRateButton: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: Colors.secondary + '20',
   },
   content: {
     flex: 1,

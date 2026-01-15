@@ -29,6 +29,7 @@ import {
 } from 'lucide-react-native';
 
 import Colors from '@/constants/colors';
+import { useExchangeRate } from '@/contexts/ExchangeRateContext';
 import { PROGRAMS } from '@/mocks/data';
 import { Program } from '@/types';
 
@@ -48,7 +49,7 @@ const ICON_MAP: Record<string, React.ComponentType<{ size: number; color: string
   award: Award,
 };
 
-function ProgramCard({ program }: { program: Program }) {
+function ProgramCard({ program, exchangeRate }: { program: Program; exchangeRate: number }) {
   const [expanded, setExpanded] = useState(false);
   const IconComponent = ICON_MAP[program.icon] || BookOpen;
 
@@ -91,6 +92,7 @@ function ProgramCard({ program }: { program: Program }) {
           <View>
             <Text style={styles.commissionLabel}>Komisyon</Text>
             <Text style={styles.commissionValue}>${program.commission}</Text>
+            <Text style={styles.commissionTRY}>₺{(program.commission * exchangeRate).toLocaleString('tr-TR')}</Text>
           </View>
         </View>
         
@@ -112,6 +114,7 @@ function ProgramCard({ program }: { program: Program }) {
 
 export default function ProgramsScreen() {
   const insets = useSafeAreaInsets();
+  const { rate: exchangeRate } = useExchangeRate();
 
   const totalCommission = PROGRAMS.reduce((sum, p) => sum + p.commission, 0);
   const avgCommission = Math.round(totalCommission / PROGRAMS.length);
@@ -149,7 +152,7 @@ export default function ProgramsScreen() {
         showsVerticalScrollIndicator={false}
       >
         {PROGRAMS.map((program) => (
-          <ProgramCard key={program.id} program={program} />
+          <ProgramCard key={program.id} program={program} exchangeRate={exchangeRate} />
         ))}
         <View style={{ height: 20 }} />
       </ScrollView>
@@ -297,6 +300,11 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     color: Colors.text,
+  },
+  commissionTRY: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    marginTop: 2,
   },
   commissionDivider: {
     width: 1,

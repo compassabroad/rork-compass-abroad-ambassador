@@ -27,6 +27,7 @@ import {
 
 import PaymentRequestModal, { WithdrawalRequest } from '@/components/PaymentRequestModal';
 import Colors from '@/constants/colors';
+import { useExchangeRate } from '@/contexts/ExchangeRateContext';
 import { MOCK_EARNINGS, MOCK_TRANSACTIONS, PROGRAMS } from '@/mocks/data';
 import { TransactionType, TRANSACTION_TYPE_LABELS } from '@/types';
 
@@ -56,9 +57,12 @@ export default function FinancesScreen() {
   const insets = useSafeAreaInsets();
   const [refreshing, setRefreshing] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  
+  const { rate: exchangeRate, fetchRate } = useExchangeRate();
 
   const onRefresh = () => {
     setRefreshing(true);
+    fetchRate();
     setTimeout(() => setRefreshing(false), 1500);
   };
 
@@ -131,7 +135,7 @@ export default function FinancesScreen() {
               <View style={styles.amountDivider} />
               <View style={styles.amountRow}>
                 <Text style={styles.amountLabel}>TRY</Text>
-                <Text style={styles.amountValueSecondary}>{formatCurrency(MOCK_EARNINGS.totalTRY, 'TRY')}</Text>
+                <Text style={styles.amountValueSecondary}>{formatCurrency(MOCK_EARNINGS.totalUSD * exchangeRate, 'TRY')}</Text>
               </View>
             </View>
 
@@ -143,7 +147,7 @@ export default function FinancesScreen() {
                 <View>
                   <Text style={styles.statLabel}>Çekilebilir</Text>
                   <Text style={[styles.statValue, { color: Colors.success }]}>
-                    {formatCurrency(availableUSD, 'USD')}
+                    {formatCurrency(availableUSD, 'USD')} / {formatCurrency(availableUSD * exchangeRate, 'TRY')}
                   </Text>
                 </View>
               </View>
@@ -155,7 +159,7 @@ export default function FinancesScreen() {
                 <View>
                   <Text style={styles.statLabel}>Bekleyen</Text>
                   <Text style={[styles.statValue, { color: Colors.warning }]}>
-                    {formatCurrency(MOCK_EARNINGS.pendingUSD, 'USD')}
+                    {formatCurrency(MOCK_EARNINGS.pendingUSD, 'USD')} / {formatCurrency(MOCK_EARNINGS.pendingUSD * exchangeRate, 'TRY')}
                   </Text>
                 </View>
               </View>
@@ -221,7 +225,7 @@ export default function FinancesScreen() {
                     </Text>
                   </View>
                   <Text style={styles.transactionAmountTRY}>
-                    {formatCurrency(transaction.amountTRY, 'TRY')}
+                    {formatCurrency(transaction.amountUSD * exchangeRate, 'TRY')}
                   </Text>
                   {transaction.status === 'pending' && (
                     <View style={styles.pendingBadge}>

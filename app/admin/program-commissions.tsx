@@ -20,7 +20,8 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 
 import Colors from '@/constants/colors';
-import { PROGRAMS, MOCK_PROGRAM_COMMISSIONS, MOCK_EARNINGS } from '@/mocks/data';
+import { useExchangeRate } from '@/contexts/ExchangeRateContext';
+import { PROGRAMS, MOCK_PROGRAM_COMMISSIONS } from '@/mocks/data';
 
 
 interface CommissionState {
@@ -29,7 +30,7 @@ interface CommissionState {
 
 export default function ProgramCommissionsScreen() {
   const router = useRouter();
-  const exchangeRate = MOCK_EARNINGS.exchangeRate;
+  const { rate: exchangeRate, formattedRate } = useExchangeRate();
 
   const initialCommissions: CommissionState = {};
   MOCK_PROGRAM_COMMISSIONS.forEach(pc => {
@@ -163,8 +164,8 @@ export default function ProgramCommissionsScreen() {
       </LinearGradient>
 
       <View style={styles.exchangeRateBar}>
-        <Text style={styles.exchangeRateLabel}>Güncel Kur:</Text>
-        <Text style={styles.exchangeRateValue}>1 USD = ₺{exchangeRate.toFixed(2)}</Text>
+        <Text style={styles.exchangeRateLabel}>Canlı Kur:</Text>
+        <Text style={styles.exchangeRateValue}>{formattedRate}</Text>
       </View>
 
       <ScrollView

@@ -25,6 +25,7 @@ import {
 } from 'lucide-react-native';
 
 import Colors from '@/constants/colors';
+import { useExchangeRate } from '@/contexts/ExchangeRateContext';
 import { MOCK_STUDENTS, MOCK_STUDENT_PIPELINES, PROGRAMS, MOCK_CURRENT_AMBASSADOR } from '@/mocks/data';
 import { STAGE_LABELS, StudentStage } from '@/types';
 
@@ -35,6 +36,8 @@ export default function StudentDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
 
+  const { rate: exchangeRate } = useExchangeRate();
+  
   const student = MOCK_STUDENTS.find(s => s.id === id);
   const pipeline = id ? MOCK_STUDENT_PIPELINES[id] : undefined;
   const program = student ? PROGRAMS.find(p => p.id === student.program) : undefined;
@@ -229,8 +232,11 @@ export default function StudentDetailScreen() {
             <Text style={styles.cardTitle}>Kazanılan Komisyon</Text>
           </View>
           <Text style={styles.commissionAmount}>${earnedCommission}</Text>
+          <Text style={styles.commissionAmountTRY}>
+            ₺{(earnedCommission * exchangeRate).toLocaleString('tr-TR')}
+          </Text>
           <Text style={styles.commissionNote}>
-            Toplam potansiyel: ${program?.commission || 0}
+            Toplam potansiyel: ${program?.commission || 0} (₺{((program?.commission || 0) * exchangeRate).toLocaleString('tr-TR')})
           </Text>
         </View>
 
@@ -491,6 +497,12 @@ const styles = StyleSheet.create({
     fontSize: 32,
     fontWeight: '700' as const,
     color: Colors.secondary,
+    marginBottom: 2,
+  },
+  commissionAmountTRY: {
+    fontSize: 18,
+    fontWeight: '600' as const,
+    color: Colors.text,
     marginBottom: 4,
   },
   commissionNote: {

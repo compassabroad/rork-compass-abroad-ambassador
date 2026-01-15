@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { X, DollarSign, CreditCard, Building2, AlertCircle, CheckCircle } from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { useExchangeRate } from '@/contexts/ExchangeRateContext';
 import { MOCK_EARNINGS, MOCK_CURRENT_AMBASSADOR } from '@/mocks/data';
 
 interface PaymentRequestModalProps {
@@ -48,9 +49,11 @@ export default function PaymentRequestModal({ visible, onClose, onSubmit }: Paym
   const [currency, setCurrency] = useState<'USD' | 'TRY'>('USD');
   const [bankName, setBankName] = useState('');
   const [showBankPicker, setShowBankPicker] = useState(false);
+  
+  const { rate: exchangeRate, formattedRate } = useExchangeRate();
 
   const availableUSD = MOCK_EARNINGS.pendingUSD;
-  const availableTRY = MOCK_EARNINGS.pendingTRY;
+  const availableTRY = availableUSD * exchangeRate;
   const iban = MOCK_CURRENT_AMBASSADOR.iban || '';
 
   const resetForm = () => {
@@ -143,7 +146,7 @@ export default function PaymentRequestModal({ visible, onClose, onSubmit }: Paym
 
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
           <View style={styles.balanceCard}>
-            <Text style={styles.balanceLabel}>Çekilebilir Bakiye</Text>
+            <Text style={styles.balanceLabel}>Çekilebilir Bakiye ({formattedRate})</Text>
             <View style={styles.balanceRow}>
               <View style={styles.balanceItem}>
                 <Text style={styles.balanceCurrency}>USD</Text>
@@ -196,6 +199,11 @@ export default function PaymentRequestModal({ visible, onClose, onSubmit }: Paym
             </View>
             <Text style={styles.inputHint}>
               Min: {currency === 'USD' ? '$50' : '₺1,000'} | Max: {formatCurrency(getAvailableBalance(), currency)}
+              {currency === 'USD' && amount && !isNaN(parseFloat(amount)) && (
+                <Text style={styles.inputHintTRY}>
+                  {' '}≈ ₺{(parseFloat(amount) * exchangeRate).toLocaleString('tr-TR')}
+                </Text>
+              )}
             </Text>
           </View>
 
@@ -422,6 +430,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.textMuted,
     marginTop: 8,
+  },
+  inputHintTRY: {
+    fontSize: 12,
+    color: Colors.secondary,
+    fontWeight: '600' as const,
   },
   ibanDisplay: {
     flexDirection: 'row',
