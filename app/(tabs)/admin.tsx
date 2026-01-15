@@ -21,6 +21,7 @@ import {
   X,
   ChevronRight,
   Settings,
+  Share2,
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -280,6 +281,25 @@ export default function AdminScreen() {
               <Text style={styles.commissionsLinkTitle}>Program Komisyonları</Text>
               <Text style={styles.commissionsLinkSubtitle}>
                 Tüm programlar için komisyon oranlarını düzenle
+              </Text>
+            </View>
+          </View>
+          <ChevronRight color={Colors.textMuted} size={24} />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.commissionsLink}
+          onPress={() => router.push('/admin/social-media')}
+          testID="social-media-button"
+        >
+          <View style={styles.commissionsLinkContent}>
+            <View style={[styles.commissionsIconContainer, { backgroundColor: '#E4405F20' }]}>
+              <Share2 color="#E4405F" size={24} />
+            </View>
+            <View style={styles.commissionsTextContainer}>
+              <Text style={styles.commissionsLinkTitle}>Sosyal Medya Linkleri</Text>
+              <Text style={styles.commissionsLinkSubtitle}>
+                Instagram, LinkedIn, Twitter ve Facebook linklerini yönet
               </Text>
             </View>
           </View>

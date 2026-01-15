@@ -1,4 +1,4 @@
-import { Student, Program, Ambassador, Earnings, ProgramType, Transaction, Notification, Conversation, User, PendingAmbassador, ProgramCommission, AmbassadorCommission, TeamMember, Announcement } from '@/types';
+import { Student, Program, Ambassador, Earnings, ProgramType, Transaction, Notification, Conversation, User, PendingAmbassador, ProgramCommission, AmbassadorCommission, TeamMember, Announcement, SocialMediaLinks } from '@/types';
 
 export const PROGRAMS: Program[] = [
   {
@@ -861,6 +861,13 @@ export const getAllAmbassadors = (): Ambassador[] => {
 
 export const getAmbassadorById = (id: string): Ambassador | undefined => {
   return getAllAmbassadors().find(a => a.id === id);
+};
+
+export const MOCK_SOCIAL_MEDIA_LINKS: SocialMediaLinks = {
+  instagram: 'https://instagram.com/compassabroad',
+  linkedin: 'https://linkedin.com/company/compassabroad',
+  twitter: 'https://twitter.com/compassabroad',
+  facebook: 'https://facebook.com/compassabroad',
 };
 
 export const MOCK_ANNOUNCEMENTS: Announcement[] = [

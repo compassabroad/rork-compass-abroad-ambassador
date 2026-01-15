@@ -241,3 +241,10 @@ export interface Announcement {
   read: boolean;
   imageUrl?: string;
 }
+
+export interface SocialMediaLinks {
+  instagram: string;
+  linkedin: string;
+  twitter: string;
+  facebook: string;
+}

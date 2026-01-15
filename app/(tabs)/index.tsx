@@ -23,6 +23,11 @@ import {
   Wallet,
   Share2,
   HelpCircle,
+  Instagram,
+  Linkedin,
+  Twitter,
+  Facebook,
+  RefreshCw,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 
@@ -33,8 +38,8 @@ import NotificationBell from '@/components/NotificationBell';
 import HowItWorksModal from '@/components/HowItWorksModal';
 
 import Colors from '@/constants/colors';
-import { MOCK_EARNINGS, MOCK_STUDENTS, MOCK_CURRENT_AMBASSADOR, PROGRAMS } from '@/mocks/data';
-import { STAGE_LABELS, AMBASSADOR_TYPE_LABELS } from '@/types';
+import { MOCK_EARNINGS, MOCK_STUDENTS, MOCK_CURRENT_AMBASSADOR, PROGRAMS, MOCK_SOCIAL_MEDIA_LINKS } from '@/mocks/data';
+import { SocialMediaLinks, STAGE_LABELS, AMBASSADOR_TYPE_LABELS } from '@/types';
 
 export default function DashboardScreen() {
   const insets = useSafeAreaInsets();
@@ -47,6 +52,8 @@ export default function DashboardScreen() {
   const [showAmbassadorModal, setShowAmbassadorModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showHowItWorksModal, setShowHowItWorksModal] = useState(false);
+  const [socialLinks] = useState<SocialMediaLinks>(MOCK_SOCIAL_MEDIA_LINKS);
+  const [isLoadingRate, setIsLoadingRate] = useState(false);
 
   const handleAddStudent = (student: NewStudent) => {
     console.log('New student added:', student);
@@ -62,14 +69,43 @@ export default function DashboardScreen() {
       duration: 600,
       useNativeDriver: true,
     }).start();
+    fetchExchangeRate();
   }, [fadeAnim]);
 
-  const onRefresh = () => {
+  const fetchExchangeRate = async () => {
+    setIsLoadingRate(true);
+    try {
+      const response = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
+      const data = await response.json();
+      if (data && data.rates && data.rates.TRY) {
+        setExchangeRate(data.rates.TRY);
+        console.log('Exchange rate fetched:', data.rates.TRY);
+      }
+    } catch (error) {
+      console.log('Failed to fetch exchange rate, using default:', error);
+    } finally {
+      setIsLoadingRate(false);
+    }
+  };
+
+  const handleSocialPress = async (url: string) => {
+    try {
+      const { Linking } = await import('react-native');
+      const canOpen = await Linking.canOpenURL(url);
+      if (canOpen) {
+        await Linking.openURL(url);
+      } else {
+        console.log('Cannot open URL:', url);
+      }
+    } catch (error) {
+      console.log('Error opening URL:', error);
+    }
+  };
+
+  const onRefresh = async () => {
     setRefreshing(true);
-    setTimeout(() => {
-      setExchangeRate(32.0 + Math.random() * 0.5);
-      setRefreshing(false);
-    }, 1500);
+    await fetchExchangeRate();
+    setRefreshing(false);
   };
 
   const formatCurrency = (amount: number, currency: 'USD' | 'TRY') => {
@@ -80,10 +116,6 @@ export default function DashboardScreen() {
   };
 
   const recentStudents = MOCK_STUDENTS.slice(0, 3);
-  const stageCount = {
-    active: MOCK_STUDENTS.filter(s => !['departed', 'approved'].includes(s.stage)).length,
-    completed: MOCK_STUDENTS.filter(s => ['departed', 'approved'].includes(s.stage)).length,
-  };
 
   return (
     <View style={styles.container}>
@@ -118,7 +150,10 @@ export default function DashboardScreen() {
           
           <View style={styles.exchangeRateContainer}>
             <Text style={styles.exchangeRateLabel}>Döviz Kuru</Text>
-            <Text style={styles.exchangeRate}>1 USD = ₺{exchangeRate.toFixed(2)}</Text>
+            <View style={styles.exchangeRateRow}>
+              <Text style={styles.exchangeRate}>1 USD = ₺{exchangeRate.toFixed(2)}</Text>
+              {isLoadingRate && <RefreshCw size={14} color={Colors.secondary} />}
+            </View>
           </View>
         </Animated.View>
       </LinearGradient>
@@ -203,28 +238,51 @@ export default function DashboardScreen() {
         </View>
 
         <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Pipeline Durumu</Text>
-            <TouchableOpacity style={styles.seeAllButton}>
-              <Text style={styles.seeAllText}>Tümü</Text>
-              <ChevronRight size={16} color={Colors.secondary} />
+          <Text style={styles.sectionTitle}>Bizi Takip Edin</Text>
+          <View style={styles.socialCard}>
+            <TouchableOpacity
+              style={styles.socialButton}
+              onPress={() => handleSocialPress(socialLinks.instagram)}
+              testID="social-instagram"
+            >
+              <View style={[styles.socialIconContainer, { backgroundColor: '#E4405F20' }]}>
+                <Instagram size={24} color="#E4405F" />
+              </View>
+              <Text style={styles.socialLabel}>Instagram</Text>
             </TouchableOpacity>
-          </View>
-          
-          <View style={styles.pipelineCard}>
-            <View style={styles.pipelineRow}>
-              <View style={styles.pipelineItem}>
-                <View style={[styles.pipelineDot, { backgroundColor: Colors.stages.application }]} />
-                <Text style={styles.pipelineCount}>{stageCount.active}</Text>
-                <Text style={styles.pipelineLabel}>Aktif</Text>
+            
+            <TouchableOpacity
+              style={styles.socialButton}
+              onPress={() => handleSocialPress(socialLinks.linkedin)}
+              testID="social-linkedin"
+            >
+              <View style={[styles.socialIconContainer, { backgroundColor: '#0A66C220' }]}>
+                <Linkedin size={24} color="#0A66C2" />
               </View>
-              <View style={styles.pipelineDivider} />
-              <View style={styles.pipelineItem}>
-                <View style={[styles.pipelineDot, { backgroundColor: Colors.stages.departed }]} />
-                <Text style={styles.pipelineCount}>{stageCount.completed}</Text>
-                <Text style={styles.pipelineLabel}>Tamamlanan</Text>
+              <Text style={styles.socialLabel}>LinkedIn</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={styles.socialButton}
+              onPress={() => handleSocialPress(socialLinks.twitter)}
+              testID="social-twitter"
+            >
+              <View style={[styles.socialIconContainer, { backgroundColor: '#1DA1F220' }]}>
+                <Twitter size={24} color="#1DA1F2" />
               </View>
-            </View>
+              <Text style={styles.socialLabel}>Twitter</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={styles.socialButton}
+              onPress={() => handleSocialPress(socialLinks.facebook)}
+              testID="social-facebook"
+            >
+              <View style={[styles.socialIconContainer, { backgroundColor: '#1877F220' }]}>
+                <Facebook size={24} color="#1877F2" />
+              </View>
+              <Text style={styles.socialLabel}>Facebook</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -390,9 +448,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.textSecondary,
   },
+  exchangeRateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   exchangeRate: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: Colors.secondary,
   },
   content: {
@@ -536,42 +599,31 @@ const styles = StyleSheet.create({
     color: Colors.secondary,
     fontWeight: '500',
   },
-  pipelineCard: {
+  socialCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     backgroundColor: Colors.surface,
     borderRadius: 16,
-    padding: 20,
+    padding: 16,
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  pipelineRow: {
-    flexDirection: 'row',
+  socialButton: {
     alignItems: 'center',
-  },
-  pipelineItem: {
     flex: 1,
-    alignItems: 'center',
   },
-  pipelineDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+  socialIconContainer: {
+    width: 52,
+    height: 52,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 8,
   },
-  pipelineCount: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: Colors.text,
-    marginBottom: 4,
-  },
-  pipelineLabel: {
-    fontSize: 12,
+  socialLabel: {
+    fontSize: 11,
     color: Colors.textSecondary,
-  },
-  pipelineDivider: {
-    width: 1,
-    height: 50,
-    backgroundColor: Colors.border,
-    marginHorizontal: 20,
+    fontWeight: '500' as const,
   },
   studentCard: {
     flexDirection: 'row',
