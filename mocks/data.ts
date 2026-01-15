@@ -1,4 +1,4 @@
-import { Student, Program, Ambassador, Earnings, ProgramType, Transaction, Notification, Conversation, User, PendingAmbassador, ProgramCommission, AmbassadorCommission, TeamMember } from '@/types';
+import { Student, Program, Ambassador, Earnings, ProgramType, Transaction, Notification, Conversation, User, PendingAmbassador, ProgramCommission, AmbassadorCommission, TeamMember, Announcement } from '@/types';
 
 export const PROGRAMS: Program[] = [
   {
@@ -834,3 +834,39 @@ export const getAllAmbassadors = (): Ambassador[] => {
 export const getAmbassadorById = (id: string): Ambassador | undefined => {
   return getAllAmbassadors().find(a => a.id === id);
 };
+
+export const MOCK_ANNOUNCEMENTS: Announcement[] = [
+  {
+    id: 'ann1',
+    title: 'Şubat Ayı Kampanyası: 2x Compass Points!',
+    preview: 'Şubat ayı boyunca tüm programlarda 2 kat Compass Points kazanın...',
+    content: 'Değerli Elçilerimiz,\n\nŞubat ayı boyunca gerçekleştireceğiniz tüm öğrenci kayıtlarında 2 kat Compass Points kazanacaksınız!\n\nKampanya Detayları:\n• Kampanya 1-28 Şubat tarihleri arasında geçerlidir\n• Tüm program türleri kampanyaya dahildir\n• Kazanılan puanlar ay sonunda hesabınıza eklenecektir\n• Puan çarpanı sadece yeni kayıtlar için geçerlidir\n\nBu fırsatı kaçırmayın ve ağınızı genişletmeye devam edin!\n\nSorularınız için destek ekibimizle iletişime geçebilirsiniz.',
+    date: '2024-01-22T09:00:00',
+    read: false,
+    imageUrl: 'https://images.unsplash.com/photo-1579621970563-ebec7560ff3e?w=800',
+  },
+  {
+    id: 'ann2',
+    title: 'Yeni Program: Online Lise Eğitimi',
+    preview: 'Artık online lise programı ile daha geniş bir kitleye ulaşabilirsiniz...',
+    content: 'Merhaba,\n\nCompass Abroad olarak yeni bir programı duyurmaktan mutluluk duyuyoruz: Online Lise Eğitimi!\n\nProgram Özellikleri:\n• Amerikan müfredatı ile online eğitim\n• Esnek ders saatleri\n• Akredite diploma\n• Üniversiteye hazırlık desteği\n\nKomisyon: $500 USD\nCompass Points: 200\n\nDetaylı bilgi için Programs sekmesini ziyaret edin.',
+    date: '2024-01-18T14:30:00',
+    read: false,
+  },
+  {
+    id: 'ann3',
+    title: '2024 Hedeflerimiz ve Yol Haritası',
+    preview: '2024 yılı için belirlediğimiz hedefler ve sizler için hazırladığımız fırsatlar...',
+    content: 'Sevgili Elçilerimiz,\n\n2024 yılına hızlı bir giriş yaptık! Bu yıl için hedeflerimizi ve sizlerle paylaşmak istediğimiz yenilikleri açıklıyoruz:\n\n2024 Hedefleri:\n• 1000+ öğrenci yerleştirmesi\n• 50 yeni ülkeye öğrenci gönderimi\n• Elçi ağımızı 500 kişiye çıkarmak\n\nYenilikler:\n• Yeni mobil uygulama özellikleri\n• Geliştirilmiş komisyon sistemi\n• Daha hızlı ödeme süreçleri\n\nBirlikte başaracağız!',
+    date: '2024-01-10T10:00:00',
+    read: true,
+  },
+  {
+    id: 'ann4',
+    title: 'Sistem Bakımı Bildirimi',
+    preview: '25 Ocak Cumartesi günü planlı sistem bakımı yapılacaktır...',
+    content: 'Duyuru,\n\n25 Ocak 2024 Cumartesi günü saat 02:00-06:00 arasında planlı sistem bakımı gerçekleştirilecektir.\n\nBu süre zarfında:\n• Mobil uygulama geçici olarak kullanılamayacaktır\n• Web paneline erişim kısıtlı olacaktır\n• Ödeme işlemleri askıya alınacaktır\n\nBakım sonrası tüm sistemler normal şekilde çalışmaya devam edecektir.\n\nAnlayışınız için teşekkür ederiz.',
+    date: '2024-01-20T16:00:00',
+    read: true,
+  },
+];

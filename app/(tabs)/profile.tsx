@@ -9,11 +9,12 @@ import {
   Switch,
   Alert,
   Platform,
+  Image,
+  Share,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  QrCode,
   Copy,
   Award,
   CreditCard,
@@ -24,6 +25,8 @@ import {
   LogOut,
   Bell,
   Globe,
+  Share2,
+  Download,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 
@@ -41,11 +44,39 @@ export default function ProfileScreen() {
   const [language, setLanguage] = useState<'tr' | 'en'>('tr');
   const [editingIban, setEditingIban] = useState(false);
 
+  const referralLink = `https://compassabroad.com/ref/${MOCK_CURRENT_AMBASSADOR.referralCode}`;
+  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(referralLink)}&bgcolor=FFFFFF&color=502274`;
+
   const copyReferralCode = async () => {
     if (Platform.OS !== 'web') {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
     Alert.alert('Kopyalandı!', `Referans kodu: ${MOCK_CURRENT_AMBASSADOR.referralCode}`);
+  };
+
+  const shareQRCode = async () => {
+    if (Platform.OS !== 'web') {
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+    try {
+      await Share.share({
+        message: `Compass Abroad'a katıl! Referans linkim: ${referralLink}`,
+        url: referralLink,
+      });
+    } catch (error) {
+      console.log('Share error:', error);
+    }
+  };
+
+  const downloadQRCode = async () => {
+    if (Platform.OS !== 'web') {
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+    Alert.alert(
+      'QR Kodu İndir',
+      'QR kodunuz galeriye kaydedildi.',
+      [{ text: 'Tamam' }]
+    );
   };
 
   const handleKvkkToggle = (value: boolean) => {
@@ -99,14 +130,29 @@ export default function ProfileScreen() {
       >
         <View style={styles.qrSection}>
           <View style={styles.qrContainer}>
-            <View style={styles.qrPlaceholder}>
-              <QrCode size={120} color={Colors.primary} strokeWidth={1} />
+            <View style={styles.qrImageContainer}>
+              <Image
+                source={{ uri: qrCodeUrl }}
+                style={styles.qrImage}
+                resizeMode="contain"
+              />
             </View>
             <Text style={styles.referralCode}>{MOCK_CURRENT_AMBASSADOR.referralCode}</Text>
-            <TouchableOpacity style={styles.copyButton} onPress={copyReferralCode}>
-              <Copy size={16} color={Colors.text} />
-              <Text style={styles.copyButtonText}>Kodu Kopyala</Text>
-            </TouchableOpacity>
+            <Text style={styles.referralLink}>{referralLink}</Text>
+            <View style={styles.qrButtons}>
+              <TouchableOpacity style={styles.qrButton} onPress={copyReferralCode}>
+                <Copy size={18} color={Colors.text} />
+                <Text style={styles.qrButtonText}>Kopyala</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.qrButton} onPress={shareQRCode}>
+                <Share2 size={18} color={Colors.text} />
+                <Text style={styles.qrButtonText}>Paylaş</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.qrButton} onPress={downloadQRCode}>
+                <Download size={18} color={Colors.text} />
+                <Text style={styles.qrButtonText}>İndir</Text>
+              </TouchableOpacity>
+            </View>
           </View>
           <Text style={styles.qrHint}>
             Bu QR kodu paylaşarak yeni öğrenci ve elçi kazanabilirsiniz
@@ -359,33 +405,47 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     width: '100%',
   },
-  qrPlaceholder: {
-    width: 160,
-    height: 160,
-    backgroundColor: Colors.text,
-    borderRadius: 12,
+  qrImageContainer: {
+    width: 180,
+    height: 180,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
+    padding: 10,
+  },
+  qrImage: {
+    width: 160,
+    height: 160,
   },
   referralCode: {
     fontSize: 24,
     fontWeight: '700',
     color: Colors.secondary,
     letterSpacing: 2,
+    marginBottom: 6,
+  },
+  referralLink: {
+    fontSize: 12,
+    color: Colors.textSecondary,
     marginBottom: 16,
   },
-  copyButton: {
+  qrButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  qrButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
     backgroundColor: Colors.primary,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
   },
-  copyButtonText: {
-    fontSize: 14,
+  qrButtonText: {
+    fontSize: 13,
     fontWeight: '600',
     color: Colors.text,
   },

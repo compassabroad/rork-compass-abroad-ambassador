@@ -229,3 +229,13 @@ export const NOTIFICATION_TYPE_LABELS: Record<NotificationType, { tr: string; ic
   announcement: { tr: 'Duyuru', icon: 'megaphone', color: '#F59E0B' },
   ambassador_joined: { tr: 'Yeni Elçi', icon: 'user-plus', color: '#8B5CF6' },
 };
+
+export interface Announcement {
+  id: string;
+  title: string;
+  preview: string;
+  content: string;
+  date: string;
+  read: boolean;
+  imageUrl?: string;
+}

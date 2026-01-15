@@ -22,6 +22,7 @@ import {
   UserPlus,
   Wallet,
   Share2,
+  HelpCircle,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 
@@ -29,6 +30,7 @@ import StudentAddModal, { NewStudent } from '@/components/StudentAddModal';
 import AmbassadorInviteModal from '@/components/AmbassadorInviteModal';
 import PaymentRequestModal, { WithdrawalRequest } from '@/components/PaymentRequestModal';
 import NotificationBell from '@/components/NotificationBell';
+import HowItWorksModal from '@/components/HowItWorksModal';
 
 import Colors from '@/constants/colors';
 import { MOCK_EARNINGS, MOCK_STUDENTS, MOCK_CURRENT_AMBASSADOR, PROGRAMS } from '@/mocks/data';
@@ -44,6 +46,7 @@ export default function DashboardScreen() {
   const [showStudentModal, setShowStudentModal] = useState(false);
   const [showAmbassadorModal, setShowAmbassadorModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showHowItWorksModal, setShowHowItWorksModal] = useState(false);
 
   const handleAddStudent = (student: NewStudent) => {
     console.log('New student added:', student);
@@ -102,7 +105,15 @@ export default function DashboardScreen() {
                 </Text>
               </View>
             </View>
-            <NotificationBell />
+            <View style={styles.headerActions}>
+              <TouchableOpacity
+                style={styles.helpButton}
+                onPress={() => setShowHowItWorksModal(true)}
+              >
+                <HelpCircle size={22} color={Colors.textSecondary} />
+              </TouchableOpacity>
+              <NotificationBell />
+            </View>
           </View>
           
           <View style={styles.exchangeRateContainer}>
@@ -305,6 +316,11 @@ export default function DashboardScreen() {
         onClose={() => setShowPaymentModal(false)}
         onSubmit={handleWithdrawalRequest}
       />
+
+      <HowItWorksModal
+        visible={showHowItWorksModal}
+        onClose={() => setShowHowItWorksModal(false)}
+      />
     </View>
   );
 }
@@ -325,6 +341,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  helpButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerLeft: {
     flex: 1,
