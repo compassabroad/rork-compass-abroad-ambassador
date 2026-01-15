@@ -14,16 +14,18 @@ import {
   BookOpen,
   School,
   Languages,
-  Baby,
   Briefcase,
   Building,
   Sun,
-  Castle,
-  Library,
   DollarSign,
   Star,
   Clock,
   MapPin,
+  FileText,
+  Users,
+  Laptop,
+  Leaf,
+  Award,
 } from 'lucide-react-native';
 
 import Colors from '@/constants/colors';
@@ -36,12 +38,14 @@ const ICON_MAP: Record<string, React.ComponentType<{ size: number; color: string
   'book-open': BookOpen,
   school: School,
   languages: Languages,
-  baby: Baby,
   briefcase: Briefcase,
   building: Building,
   sun: Sun,
-  castle: Castle,
-  library: Library,
+  'file-text': FileText,
+  users: Users,
+  laptop: Laptop,
+  'maple-leaf': Leaf,
+  award: Award,
 };
 
 function ProgramCard({ program }: { program: Program }) {
@@ -119,7 +123,7 @@ export default function ProgramsScreen() {
         style={[styles.header, { paddingTop: insets.top + 16 }]}
       >
         <Text style={styles.headerTitle}>Programlar</Text>
-        <Text style={styles.headerSubtitle}>11 eğitim programı</Text>
+        <Text style={styles.headerSubtitle}>13 eğitim programı</Text>
       </LinearGradient>
 
       <View style={styles.summaryContainer}>

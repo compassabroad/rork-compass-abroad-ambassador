@@ -21,17 +21,19 @@ export interface Student {
 }
 
 export type ProgramType = 
-  | 'camp_usa'
-  | 'university'
-  | 'masters'
+  | 'language_education'
+  | 'bachelor'
   | 'high_school'
-  | 'language_school'
-  | 'au_pair'
-  | 'work_travel'
   | 'internship'
-  | 'summer_camp'
-  | 'boarding_school'
-  | 'foundation';
+  | 'work_and_study'
+  | 'visa_consulting'
+  | 'group_summer_school'
+  | 'individual_summer_school'
+  | 'paid_teaching'
+  | 'camp_usa'
+  | 'canada_online_highschool'
+  | 'canada_language'
+  | 'masters';
 
 export interface Program {
   id: ProgramType;
