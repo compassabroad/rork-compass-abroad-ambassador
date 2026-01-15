@@ -1,5 +1,5 @@
 import { Tabs } from "expo-router";
-import { LayoutDashboard, Users, Network, BookOpen, User } from "lucide-react-native";
+import { LayoutDashboard, Users, Network, Wallet, MessageCircle } from "lucide-react-native";
 import React from "react";
 import { Platform } from "react-native";
 
@@ -47,17 +47,29 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="finances"
+        options={{
+          title: "Finans",
+          tabBarIcon: ({ color, size }) => <Wallet color={color} size={size} />,
+        }}
+      />
+      <Tabs.Screen
+        name="chat"
+        options={{
+          title: "Mesajlar",
+          tabBarIcon: ({ color, size }) => <MessageCircle color={color} size={size} />,
+        }}
+      />
+      <Tabs.Screen
         name="programs"
         options={{
-          title: "Programlar",
-          tabBarIcon: ({ color, size }) => <BookOpen color={color} size={size} />,
+          href: null,
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
-          title: "Profil",
-          tabBarIcon: ({ color, size }) => <User color={color} size={size} />,
+          href: null,
         }}
       />
     </Tabs>

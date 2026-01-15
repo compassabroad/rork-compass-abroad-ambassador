@@ -14,6 +14,7 @@ import {
   Calendar,
   Phone,
 } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
 
 import Colors from '@/constants/colors';
 import { MOCK_STUDENTS, PROGRAMS } from '@/mocks/data';
@@ -23,6 +24,7 @@ const STAGES: StudentStage[] = ['registered', 'documents', 'application', 'inter
 
 export default function StudentsScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const [selectedStage, setSelectedStage] = useState<StudentStage | 'all'>('all');
   const scrollViewRef = useRef<ScrollView>(null);
 
@@ -38,7 +40,12 @@ export default function StudentsScreen() {
     const program = PROGRAMS.find(p => p.id === student.program);
     
     return (
-      <TouchableOpacity key={student.id} style={styles.studentCard} activeOpacity={0.7}>
+      <TouchableOpacity 
+        key={student.id} 
+        style={styles.studentCard} 
+        activeOpacity={0.7}
+        onPress={() => router.push(`/students/${student.id}`)}
+      >
         <View style={styles.studentHeader}>
           <View style={styles.studentAvatar}>
             <Text style={styles.studentInitial}>

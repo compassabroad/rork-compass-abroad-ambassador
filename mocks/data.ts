@@ -1,4 +1,4 @@
-import { Student, Program, Ambassador, Earnings, ProgramType } from '@/types';
+import { Student, Program, Ambassador, Earnings, ProgramType, Transaction, Notification, Conversation } from '@/types';
 
 export const PROGRAMS: Program[] = [
   {
@@ -348,4 +348,352 @@ export const getProgramById = (id: ProgramType): Program | undefined => {
 
 export const getStudentsByStage = (students: Student[], stage: string): Student[] => {
   return students.filter(s => s.stage === stage);
+};
+
+export const MOCK_TRANSACTIONS: Transaction[] = [
+  {
+    id: 't1',
+    type: 'student_departed',
+    amountUSD: 800,
+    amountTRY: 25600,
+    date: '2024-01-20',
+    studentName: 'Can Özkan',
+    studentId: '5',
+    description: 'Can Özkan - Dil Okulu programı tamamlandı',
+    status: 'completed',
+  },
+  {
+    id: 't2',
+    type: 'student_visa_approved',
+    amountUSD: 300,
+    amountTRY: 9600,
+    date: '2024-01-18',
+    studentName: 'Zeynep Çelik',
+    studentId: '4',
+    description: 'Zeynep Çelik - Camp USA vize onayı',
+    status: 'completed',
+  },
+  {
+    id: 't3',
+    type: 'referral_commission',
+    amountUSD: 150,
+    amountTRY: 4800,
+    date: '2024-01-15',
+    description: 'Emre Güneş alt elçi komisyonu',
+    status: 'completed',
+  },
+  {
+    id: 't4',
+    type: 'student_program_selected',
+    amountUSD: 200,
+    amountTRY: 6400,
+    date: '2024-01-12',
+    studentName: 'Ahmet Yılmaz',
+    studentId: '1',
+    description: 'Ahmet Yılmaz - Üniversite programı seçildi',
+    status: 'completed',
+  },
+  {
+    id: 't5',
+    type: 'bonus',
+    amountUSD: 500,
+    amountTRY: 16000,
+    date: '2024-01-10',
+    description: 'Aylık hedef bonusu',
+    status: 'completed',
+  },
+  {
+    id: 't6',
+    type: 'payment_withdrawal',
+    amountUSD: -2000,
+    amountTRY: -64000,
+    date: '2024-01-08',
+    description: 'Banka transferi - Garanti Bankası',
+    status: 'completed',
+  },
+  {
+    id: 't7',
+    type: 'student_registration',
+    amountUSD: 50,
+    amountTRY: 1600,
+    date: '2024-01-22',
+    studentName: 'Burak Arslan',
+    studentId: '7',
+    description: 'Burak Arslan - Yeni öğrenci kaydı',
+    status: 'pending',
+  },
+  {
+    id: 't8',
+    type: 'student_visa_approved',
+    amountUSD: 400,
+    amountTRY: 12800,
+    date: '2024-01-23',
+    studentName: 'Mehmet Demir',
+    studentId: '3',
+    description: 'Mehmet Demir - Work & Travel vize aşamasında',
+    status: 'pending',
+  },
+];
+
+export const MOCK_NOTIFICATIONS: Notification[] = [
+  {
+    id: 'n1',
+    type: 'student_update',
+    title: 'Öğrenci Durumu Güncellendi',
+    message: 'Mehmet Demir vize aşamasına geçti.',
+    date: '2024-01-23T14:30:00',
+    read: false,
+    studentId: '3',
+  },
+  {
+    id: 'n2',
+    type: 'payment_received',
+    title: 'Ödeme Alındı',
+    message: '$800 komisyon hesabınıza aktarıldı.',
+    date: '2024-01-20T10:15:00',
+    read: false,
+  },
+  {
+    id: 'n3',
+    type: 'ambassador_joined',
+    title: 'Yeni Elçi Katıldı',
+    message: 'Berk Özdemir ekibinize katıldı!',
+    date: '2024-01-12T16:45:00',
+    read: true,
+    ambassadorId: 'sub1-2',
+  },
+  {
+    id: 'n4',
+    type: 'announcement',
+    title: 'Yeni Kampanya',
+    message: 'Şubat ayında 2 kat puan kazanın! Detaylar için uygulamayı kontrol edin.',
+    date: '2024-01-22T09:00:00',
+    read: false,
+  },
+  {
+    id: 'n5',
+    type: 'student_update',
+    title: 'Vize Onaylandı',
+    message: 'Zeynep Çelik\'in vizesi onaylandı.',
+    date: '2024-01-18T11:20:00',
+    read: true,
+    studentId: '4',
+  },
+  {
+    id: 'n6',
+    type: 'payment_received',
+    title: 'Bonus Ödeme',
+    message: '$500 aylık hedef bonusu eklendi.',
+    date: '2024-01-10T08:00:00',
+    read: true,
+  },
+  {
+    id: 'n7',
+    type: 'student_update',
+    title: 'Yeni Öğrenci Kaydı',
+    message: 'Burak Arslan sisteme kaydedildi.',
+    date: '2024-01-22T15:30:00',
+    read: false,
+    studentId: '7',
+  },
+];
+
+export const MOCK_CONVERSATIONS: Conversation[] = [
+  {
+    id: 'c1',
+    participantName: 'Destek Ekibi',
+    participantRole: 'Compass Abroad Destek',
+    lastMessage: 'Yardımcı olabilecek başka bir konu var mı?',
+    lastMessageTime: '2024-01-23T15:30:00',
+    unreadCount: 2,
+    messages: [
+      {
+        id: 'm1',
+        text: 'Merhaba, komisyon hesaplama konusunda yardıma ihtiyacım var.',
+        senderId: 'current',
+        timestamp: '2024-01-23T14:00:00',
+        read: true,
+      },
+      {
+        id: 'm2',
+        text: 'Merhaba Deniz! Size nasıl yardımcı olabilirim?',
+        senderId: 'support',
+        timestamp: '2024-01-23T14:05:00',
+        read: true,
+      },
+      {
+        id: 'm3',
+        text: 'Yüksek lisans programı için komisyon oranı nedir?',
+        senderId: 'current',
+        timestamp: '2024-01-23T14:10:00',
+        read: true,
+      },
+      {
+        id: 'm4',
+        text: 'Yüksek lisans programı için komisyon $1000 ve 400 Compass Points kazanırsınız.',
+        senderId: 'support',
+        timestamp: '2024-01-23T14:15:00',
+        read: true,
+      },
+      {
+        id: 'm5',
+        text: 'Teşekkürler! Çok yardımcı oldunuz.',
+        senderId: 'current',
+        timestamp: '2024-01-23T15:00:00',
+        read: true,
+      },
+      {
+        id: 'm6',
+        text: 'Rica ederim! Yardımcı olabilecek başka bir konu var mı?',
+        senderId: 'support',
+        timestamp: '2024-01-23T15:30:00',
+        read: false,
+      },
+    ],
+  },
+  {
+    id: 'c2',
+    participantName: 'Program Danışmanı',
+    participantRole: 'Eğitim Danışmanı',
+    lastMessage: 'Work & Travel için dökümanları kontrol edeceğim.',
+    lastMessageTime: '2024-01-22T11:45:00',
+    unreadCount: 0,
+    messages: [
+      {
+        id: 'm7',
+        text: 'Mehmet Demir için Work & Travel başvurusu hakkında bilgi alabilir miyim?',
+        senderId: 'current',
+        timestamp: '2024-01-22T10:00:00',
+        read: true,
+      },
+      {
+        id: 'm8',
+        text: 'Tabii, başvuruyu inceliyorum.',
+        senderId: 'advisor',
+        timestamp: '2024-01-22T10:30:00',
+        read: true,
+      },
+      {
+        id: 'm9',
+        text: 'Work & Travel için dökümanları kontrol edeceğim.',
+        senderId: 'advisor',
+        timestamp: '2024-01-22T11:45:00',
+        read: true,
+      },
+    ],
+  },
+  {
+    id: 'c3',
+    participantName: 'Finans Departmanı',
+    participantRole: 'Ödeme İşlemleri',
+    lastMessage: 'Ödemeniz 3 iş günü içinde hesabınıza aktarılacak.',
+    lastMessageTime: '2024-01-08T16:00:00',
+    unreadCount: 0,
+    messages: [
+      {
+        id: 'm10',
+        text: 'Ödeme talebim ne durumda?',
+        senderId: 'current',
+        timestamp: '2024-01-08T14:00:00',
+        read: true,
+      },
+      {
+        id: 'm11',
+        text: 'Ödemeniz onaylandı ve işleme alındı.',
+        senderId: 'finance',
+        timestamp: '2024-01-08T15:30:00',
+        read: true,
+      },
+      {
+        id: 'm12',
+        text: 'Ödemeniz 3 iş günü içinde hesabınıza aktarılacak.',
+        senderId: 'finance',
+        timestamp: '2024-01-08T16:00:00',
+        read: true,
+      },
+    ],
+  },
+];
+
+export const MOCK_STUDENT_PIPELINES: Record<string, { stage: string; date: string | null }[]> = {
+  '1': [
+    { stage: 'registered', date: '2024-01-15' },
+    { stage: 'documents', date: '2024-01-17' },
+    { stage: 'application', date: '2024-01-20' },
+    { stage: 'interview', date: null },
+    { stage: 'visa', date: null },
+    { stage: 'approved', date: null },
+    { stage: 'departed', date: null },
+  ],
+  '2': [
+    { stage: 'registered', date: '2024-01-10' },
+    { stage: 'documents', date: '2024-01-12' },
+    { stage: 'application', date: '2024-01-15' },
+    { stage: 'interview', date: '2024-01-22' },
+    { stage: 'visa', date: null },
+    { stage: 'approved', date: null },
+    { stage: 'departed', date: null },
+  ],
+  '3': [
+    { stage: 'registered', date: '2024-01-05' },
+    { stage: 'documents', date: '2024-01-08' },
+    { stage: 'application', date: '2024-01-12' },
+    { stage: 'interview', date: '2024-01-18' },
+    { stage: 'visa', date: '2024-01-23' },
+    { stage: 'approved', date: null },
+    { stage: 'departed', date: null },
+  ],
+  '4': [
+    { stage: 'registered', date: '2023-12-20' },
+    { stage: 'documents', date: '2023-12-25' },
+    { stage: 'application', date: '2024-01-02' },
+    { stage: 'interview', date: '2024-01-10' },
+    { stage: 'visa', date: '2024-01-15' },
+    { stage: 'approved', date: '2024-01-18' },
+    { stage: 'departed', date: null },
+  ],
+  '5': [
+    { stage: 'registered', date: '2023-11-15' },
+    { stage: 'documents', date: '2023-11-20' },
+    { stage: 'application', date: '2023-11-28' },
+    { stage: 'interview', date: '2023-12-05' },
+    { stage: 'visa', date: '2023-12-20' },
+    { stage: 'approved', date: '2024-01-05' },
+    { stage: 'departed', date: '2024-01-10' },
+  ],
+  '6': [
+    { stage: 'registered', date: '2024-01-18' },
+    { stage: 'documents', date: '2024-01-21' },
+    { stage: 'application', date: null },
+    { stage: 'interview', date: null },
+    { stage: 'visa', date: null },
+    { stage: 'approved', date: null },
+    { stage: 'departed', date: null },
+  ],
+  '7': [
+    { stage: 'registered', date: '2024-01-22' },
+    { stage: 'documents', date: null },
+    { stage: 'application', date: null },
+    { stage: 'interview', date: null },
+    { stage: 'visa', date: null },
+    { stage: 'approved', date: null },
+    { stage: 'departed', date: null },
+  ],
+  '8': [
+    { stage: 'registered', date: '2024-01-12' },
+    { stage: 'documents', date: '2024-01-15' },
+    { stage: 'application', date: '2024-01-19' },
+    { stage: 'interview', date: null },
+    { stage: 'visa', date: null },
+    { stage: 'approved', date: null },
+    { stage: 'departed', date: null },
+  ],
+};
+
+export const getUnreadNotificationsCount = (): number => {
+  return MOCK_NOTIFICATIONS.filter(n => !n.read).length;
+};
+
+export const getTotalUnreadMessages = (): number => {
+  return MOCK_CONVERSATIONS.reduce((acc, conv) => acc + conv.unreadCount, 0);
 };

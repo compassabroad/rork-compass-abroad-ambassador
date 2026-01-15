@@ -23,10 +23,12 @@ import {
   Wallet,
   Share2,
 } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
 
 import StudentAddModal, { NewStudent } from '@/components/StudentAddModal';
 import AmbassadorInviteModal from '@/components/AmbassadorInviteModal';
 import PaymentRequestModal, { WithdrawalRequest } from '@/components/PaymentRequestModal';
+import NotificationBell from '@/components/NotificationBell';
 
 import Colors from '@/constants/colors';
 import { MOCK_EARNINGS, MOCK_STUDENTS, MOCK_CURRENT_AMBASSADOR, PROGRAMS } from '@/mocks/data';
@@ -34,6 +36,7 @@ import { STAGE_LABELS, AMBASSADOR_TYPE_LABELS } from '@/types';
 
 export default function DashboardScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
   const [exchangeRate, setExchangeRate] = useState(MOCK_EARNINGS.exchangeRate);
   const [fadeAnim] = useState(() => new Animated.Value(0));
@@ -87,16 +90,19 @@ export default function DashboardScreen() {
       >
         <Animated.View style={[styles.header, { opacity: fadeAnim }]}>
           <View style={styles.headerTop}>
-            <View>
-              <Text style={styles.greeting}>Merhaba,</Text>
-              <Text style={styles.userName}>{MOCK_CURRENT_AMBASSADOR.name}</Text>
+            <View style={styles.headerLeft}>
+              <View>
+                <Text style={styles.greeting}>Merhaba,</Text>
+                <Text style={styles.userName}>{MOCK_CURRENT_AMBASSADOR.name}</Text>
+              </View>
+              <View style={[styles.badge, { backgroundColor: AMBASSADOR_TYPE_LABELS[MOCK_CURRENT_AMBASSADOR.type].color + '30' }]}>
+                <Award size={16} color={AMBASSADOR_TYPE_LABELS[MOCK_CURRENT_AMBASSADOR.type].color} />
+                <Text style={[styles.badgeText, { color: AMBASSADOR_TYPE_LABELS[MOCK_CURRENT_AMBASSADOR.type].color }]}>
+                  {AMBASSADOR_TYPE_LABELS[MOCK_CURRENT_AMBASSADOR.type].tr}
+                </Text>
+              </View>
             </View>
-            <View style={[styles.badge, { backgroundColor: AMBASSADOR_TYPE_LABELS[MOCK_CURRENT_AMBASSADOR.type].color + '30' }]}>
-              <Award size={16} color={AMBASSADOR_TYPE_LABELS[MOCK_CURRENT_AMBASSADOR.type].color} />
-              <Text style={[styles.badgeText, { color: AMBASSADOR_TYPE_LABELS[MOCK_CURRENT_AMBASSADOR.type].color }]}>
-                {AMBASSADOR_TYPE_LABELS[MOCK_CURRENT_AMBASSADOR.type].tr}
-              </Text>
-            </View>
+            <NotificationBell />
           </View>
           
           <View style={styles.exchangeRateContainer}>
@@ -220,10 +226,14 @@ export default function DashboardScreen() {
             </TouchableOpacity>
           </View>
           
-          {recentStudents.map((student, index) => {
+          {recentStudents.map((student) => {
             const program = PROGRAMS.find(p => p.id === student.program);
             return (
-              <TouchableOpacity key={student.id} style={styles.studentCard}>
+              <TouchableOpacity 
+                key={student.id} 
+                style={styles.studentCard}
+                onPress={() => router.push(`/students/${student.id}`)}
+              >
                 <View style={styles.studentAvatar}>
                   <Text style={styles.studentInitial}>
                     {student.name.split(' ').map(n => n[0]).join('')}
@@ -315,6 +325,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
+  },
+  headerLeft: {
+    flex: 1,
   },
   greeting: {
     fontSize: 14,
