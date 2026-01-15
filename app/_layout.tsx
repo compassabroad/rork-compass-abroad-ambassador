@@ -79,6 +79,18 @@ function RootLayoutNav() {
           headerShown: false,
         }}
       />
+      <Stack.Screen
+        name="admin/program-commissions"
+        options={{
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen
+        name="admin/ambassador-commissions/[id]"
+        options={{
+          headerShown: false,
+        }}
+      />
       <Stack.Screen name="+not-found" />
     </Stack>
   );
