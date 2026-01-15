@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { Bell } from 'lucide-react-native';
 
 import Colors from '@/constants/colors';
-import { getUnreadNotificationsCount } from '@/mocks/data';
+import { useNotifications } from '@/contexts/NotificationContext';
 
 interface NotificationBellProps {
   size?: number;
@@ -12,7 +12,7 @@ interface NotificationBellProps {
 
 export default function NotificationBell({ size = 24 }: NotificationBellProps) {
   const router = useRouter();
-  const unreadCount = getUnreadNotificationsCount();
+  const { unreadCount } = useNotifications();
 
   return (
     <TouchableOpacity 

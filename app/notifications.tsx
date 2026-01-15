@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
   View,
   Text,
@@ -20,8 +20,8 @@ import {
 } from 'lucide-react-native';
 
 import Colors from '@/constants/colors';
-import { MOCK_NOTIFICATIONS } from '@/mocks/data';
-import { NotificationType, Notification } from '@/types';
+import { useNotifications } from '@/contexts/NotificationContext';
+import { NotificationType } from '@/types';
 
 const getNotificationIcon = (type: NotificationType) => {
   const iconProps = { size: 20 };
@@ -61,7 +61,7 @@ export default function NotificationsScreen() {
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<FilterType>('all');
-  const [notifications, setNotifications] = useState<Notification[]>(MOCK_NOTIFICATIONS);
+  const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -72,15 +72,7 @@ export default function NotificationsScreen() {
     ? notifications 
     : notifications.filter(n => !n.read);
 
-  const markAsRead = (id: string) => {
-    setNotifications(prev => 
-      prev.map(n => n.id === id ? { ...n, read: true } : n)
-    );
-  };
-
-  const markAllAsRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-  };
+  
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -100,7 +92,7 @@ export default function NotificationsScreen() {
     }
   };
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  
 
   return (
     <View style={styles.container}>
