@@ -19,7 +19,14 @@ import {
   Clock,
   Award,
   ChevronRight,
+  UserPlus,
+  Wallet,
+  Share2,
 } from 'lucide-react-native';
+
+import StudentAddModal, { NewStudent } from '@/components/StudentAddModal';
+import AmbassadorInviteModal from '@/components/AmbassadorInviteModal';
+import PaymentRequestModal, { WithdrawalRequest } from '@/components/PaymentRequestModal';
 
 import Colors from '@/constants/colors';
 import { MOCK_EARNINGS, MOCK_STUDENTS, MOCK_CURRENT_AMBASSADOR, PROGRAMS } from '@/mocks/data';
@@ -30,6 +37,18 @@ export default function DashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [exchangeRate, setExchangeRate] = useState(MOCK_EARNINGS.exchangeRate);
   const [fadeAnim] = useState(() => new Animated.Value(0));
+  
+  const [showStudentModal, setShowStudentModal] = useState(false);
+  const [showAmbassadorModal, setShowAmbassadorModal] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+
+  const handleAddStudent = (student: NewStudent) => {
+    console.log('New student added:', student);
+  };
+
+  const handleWithdrawalRequest = (request: WithdrawalRequest) => {
+    console.log('Withdrawal request:', request);
+  };
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -227,6 +246,55 @@ export default function DashboardScreen() {
 
         <View style={{ height: 20 }} />
       </ScrollView>
+
+      <View style={styles.quickActionsContainer}>
+        <TouchableOpacity 
+          style={styles.quickActionButton} 
+          onPress={() => setShowStudentModal(true)}
+        >
+          <View style={[styles.quickActionIcon, { backgroundColor: Colors.success + '30' }]}>
+            <UserPlus size={20} color={Colors.success} />
+          </View>
+          <Text style={styles.quickActionText}>Öğrenci</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={styles.quickActionButton} 
+          onPress={() => setShowAmbassadorModal(true)}
+        >
+          <View style={[styles.quickActionIcon, { backgroundColor: Colors.info + '30' }]}>
+            <Share2 size={20} color={Colors.info} />
+          </View>
+          <Text style={styles.quickActionText}>Davet</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={styles.quickActionButton} 
+          onPress={() => setShowPaymentModal(true)}
+        >
+          <View style={[styles.quickActionIcon, { backgroundColor: Colors.secondary + '30' }]}>
+            <Wallet size={20} color={Colors.secondary} />
+          </View>
+          <Text style={styles.quickActionText}>Çekim</Text>
+        </TouchableOpacity>
+      </View>
+
+      <StudentAddModal
+        visible={showStudentModal}
+        onClose={() => setShowStudentModal(false)}
+        onSubmit={handleAddStudent}
+      />
+      
+      <AmbassadorInviteModal
+        visible={showAmbassadorModal}
+        onClose={() => setShowAmbassadorModal(false)}
+      />
+      
+      <PaymentRequestModal
+        visible={showPaymentModal}
+        onClose={() => setShowPaymentModal(false)}
+        onSubmit={handleWithdrawalRequest}
+      />
     </View>
   );
 }
@@ -509,5 +577,42 @@ const styles = StyleSheet.create({
   stageText: {
     fontSize: 11,
     fontWeight: '600',
+  },
+  quickActionsContainer: {
+    position: 'absolute',
+    bottom: 20,
+    left: 16,
+    right: 16,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 16,
+    backgroundColor: Colors.surfaceElevated,
+    borderRadius: 20,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  quickActionButton: {
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  quickActionIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  quickActionText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.text,
   },
 });

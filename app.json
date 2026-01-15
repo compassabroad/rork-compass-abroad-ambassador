@@ -22,7 +22,10 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "app.rork.compass_abroad_ambassador_vigr72d"
+      "package": "app.rork.compass_abroad_ambassador_vigr72d",
+      "permissions": [
+        "android.permission.VIBRATE"
+      ]
     },
     "web": {
       "favicon": "./assets/images/favicon.png"
