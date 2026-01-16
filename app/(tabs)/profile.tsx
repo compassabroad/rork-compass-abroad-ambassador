@@ -12,7 +12,9 @@ import {
   Image,
   Share,
   Modal,
+  Linking,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -88,18 +90,39 @@ export default function ProfileScreen() {
     if (Platform.OS !== 'web') {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
-    Alert.alert('Kopyalandı!', `Referans kodu: ${MOCK_CURRENT_AMBASSADOR.referralCode}`);
+    try {
+      await Clipboard.setStringAsync(referralLink);
+      Alert.alert('Kopyalandı!', 'Referans linki panoya kopyalandı.');
+    } catch (error) {
+      console.log('Clipboard error:', error);
+      Alert.alert('Hata', 'Kopyalama işlemi başarısız oldu.');
+    }
   };
 
   const shareQRCode = async () => {
     if (Platform.OS !== 'web') {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
+    const shareMessage = `Compass Abroad'a katıl! Referans linkim: ${referralLink}`;
+    
     try {
-      await Share.share({
-        message: `Compass Abroad'a katıl! Referans linkim: ${referralLink}`,
-        url: referralLink,
-      });
+      if (Platform.OS === 'web') {
+        if (navigator.share) {
+          await navigator.share({
+            title: 'Compass Abroad Davet',
+            text: shareMessage,
+            url: referralLink,
+          });
+        } else {
+          await Clipboard.setStringAsync(referralLink);
+          Alert.alert('Link Kopyalandı!', 'Paylaşım desteklenmiyor, link panoya kopyalandı.');
+        }
+      } else {
+        await Share.share({
+          message: shareMessage,
+          url: referralLink,
+        });
+      }
     } catch (error) {
       console.log('Share error:', error);
     }
@@ -109,10 +132,36 @@ export default function ProfileScreen() {
     if (Platform.OS !== 'web') {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
+    
+    if (Platform.OS === 'web') {
+      try {
+        await Linking.openURL(qrCodeUrl);
+        Alert.alert('QR Kodu', 'QR kodu yeni sekmede açıldı. Sağ tıklayıp kaydedebilirsiniz.', [{ text: 'Tamam' }]);
+      } catch (error) {
+        console.log('QR download error:', error);
+      }
+    } else {
+      Alert.alert('QR Kodu İndir', 'QR kodunuz galeriye kaydedildi.', [{ text: 'Tamam' }]);
+    }
+  };
+
+  const handleLogout = () => {
     Alert.alert(
-      'QR Kodu İndir',
-      'QR kodunuz galeriye kaydedildi.',
-      [{ text: 'Tamam' }]
+      'Çıkış Yap',
+      'Hesabınızdan çıkış yapmak istediğinizden emin misiniz?',
+      [
+        { text: 'İptal', style: 'cancel' },
+        { 
+          text: 'Çıkış Yap', 
+          style: 'destructive',
+          onPress: () => {
+            if (Platform.OS !== 'web') {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            }
+            router.replace('/login');
+          }
+        },
+      ]
     );
   };
 
@@ -557,7 +606,7 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        <TouchableOpacity style={styles.logoutButton}>
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <LogOut size={20} color={Colors.error} />
           <Text style={styles.logoutText}>Çıkış Yap</Text>
         </TouchableOpacity>

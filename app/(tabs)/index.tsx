@@ -280,7 +280,7 @@ export default function DashboardScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Son Öğrenciler</Text>
-            <TouchableOpacity style={styles.seeAllButton}>
+            <TouchableOpacity style={styles.seeAllButton} onPress={() => router.push('/students')}>
               <Text style={styles.seeAllText}>Tümü</Text>
               <ChevronRight size={16} color={Colors.secondary} />
             </TouchableOpacity>
