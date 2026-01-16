@@ -36,8 +36,8 @@ import {
   AlertCircle,
   Star,
   Trash2,
-  Edit3,
 } from 'lucide-react-native';
+import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 
 import Colors from '@/constants/colors';
@@ -319,7 +319,7 @@ export default function ProfileScreen() {
                 accessibilityLabel="Profili Düzenle"
                 accessibilityRole="button"
               >
-                <Edit3 size={24} color="#FFD700" />
+                <Feather name="edit-2" size={24} color="#FFD700" />
               </TouchableOpacity>
             </View>
             {MOCK_CURRENT_AMBASSADOR.pendingFirstName && (
