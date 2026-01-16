@@ -293,14 +293,23 @@ export default function ProfileScreen() {
         style={[styles.header, { paddingTop: insets.top + 16 }]}
       >
         <View style={styles.profileHeader}>
-          <View style={[styles.avatar, { borderColor: typeInfo.color }]}>
-            <Text style={styles.avatarText}>
-              {MOCK_CURRENT_AMBASSADOR.name.split(' ').map(n => n[0]).join('')}
-            </Text>
-            <View style={[styles.typeBadgeSmall, { backgroundColor: typeInfo.color }]}>
-              <Award size={12} color={Colors.background} />
+          {MOCK_CURRENT_AMBASSADOR.profilePhoto ? (
+            <View style={[styles.avatarContainer, { borderColor: typeInfo.color }]}>
+              <Image source={{ uri: MOCK_CURRENT_AMBASSADOR.profilePhoto }} style={styles.avatarImage} />
+              <View style={[styles.typeBadgeSmall, { backgroundColor: typeInfo.color }]}>
+                <Award size={12} color={Colors.background} />
+              </View>
             </View>
-          </View>
+          ) : (
+            <View style={[styles.avatar, { borderColor: typeInfo.color }]}>
+              <Text style={styles.avatarText}>
+                {MOCK_CURRENT_AMBASSADOR.name.split(' ').map(n => n[0]).join('')}
+              </Text>
+              <View style={[styles.typeBadgeSmall, { backgroundColor: typeInfo.color }]}>
+                <Award size={12} color={Colors.background} />
+              </View>
+            </View>
+          )}
           <View style={styles.profileInfo}>
             <View style={styles.profileNameRow}>
               <Text style={styles.profileName}>{MOCK_CURRENT_AMBASSADOR.name}</Text>
@@ -754,6 +763,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 2,
     borderColor: Colors.background,
+  },
+  avatarContainer: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    marginRight: 16,
+    borderWidth: 3,
+    position: 'relative',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 36,
   },
   profileInfo: {
     flex: 1,

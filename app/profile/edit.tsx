@@ -9,7 +9,10 @@ import {
   Alert,
   Platform,
   Modal,
+  Image,
+  ActionSheetIOS,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import {
   User,
@@ -74,6 +77,7 @@ export default function ProfileEditScreen() {
   const [newIban, setNewIban] = useState('');
   const [showBankPicker, setShowBankPicker] = useState(false);
   const [ibanError, setIbanError] = useState('');
+  const [profilePhoto, setProfilePhoto] = useState<string | null>(MOCK_CURRENT_AMBASSADOR.profilePhoto || null);
 
   const [pendingFirstName, setPendingFirstName] = useState(firstName);
   const [pendingLastName, setPendingLastName] = useState(lastName);
@@ -81,6 +85,114 @@ export default function ProfileEditScreen() {
   const originalFirstName = MOCK_CURRENT_AMBASSADOR.firstName;
   const originalLastName = MOCK_CURRENT_AMBASSADOR.lastName;
   const tcIdentity = MOCK_CURRENT_AMBASSADOR.tcIdentity || '';
+
+  const pickImageFromGallery = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      console.log('Image picker result:', result);
+
+      if (!result.canceled && result.assets[0]) {
+        setProfilePhoto(result.assets[0].uri);
+        if (Platform.OS !== 'web') {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Hata', 'Fotoğraf seçilirken bir hata oluştu.');
+    }
+  };
+
+  const takePhoto = async () => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('İzin Gerekli', 'Kamera kullanmak için izin vermeniz gerekiyor.');
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      console.log('Camera result:', result);
+
+      if (!result.canceled && result.assets[0]) {
+        setProfilePhoto(result.assets[0].uri);
+        if (Platform.OS !== 'web') {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }
+      }
+    } catch (error) {
+      console.error('Error taking photo:', error);
+      Alert.alert('Hata', 'Fotoğraf çekilirken bir hata oluştu.');
+    }
+  };
+
+  const removePhoto = () => {
+    Alert.alert(
+      'Fotoğrafı Kaldır',
+      'Profil fotoğrafınızı kaldırmak istediğinizden emin misiniz?',
+      [
+        { text: 'İptal', style: 'cancel' },
+        {
+          text: 'Kaldır',
+          style: 'destructive',
+          onPress: () => {
+            setProfilePhoto(null);
+            if (Platform.OS !== 'web') {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleChangePhoto = () => {
+    if (Platform.OS === 'ios') {
+      const options = profilePhoto
+        ? ['İptal', 'Galeriden Seç', 'Fotoğraf Çek', 'Fotoğrafı Kaldır']
+        : ['İptal', 'Galeriden Seç', 'Fotoğraf Çek'];
+      const destructiveButtonIndex = profilePhoto ? 3 : undefined;
+
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options,
+          cancelButtonIndex: 0,
+          destructiveButtonIndex,
+        },
+        (buttonIndex) => {
+          if (buttonIndex === 1) {
+            pickImageFromGallery();
+          } else if (buttonIndex === 2) {
+            takePhoto();
+          } else if (buttonIndex === 3 && profilePhoto) {
+            removePhoto();
+          }
+        }
+      );
+    } else {
+      Alert.alert(
+        'Profil Fotoğrafı',
+        'Fotoğraf kaynağını seçin',
+        [
+          { text: 'İptal', style: 'cancel' },
+          { text: 'Galeriden Seç', onPress: pickImageFromGallery },
+          { text: 'Fotoğraf Çek', onPress: takePhoto },
+          ...(profilePhoto ? [{ text: 'Fotoğrafı Kaldır', onPress: removePhoto, style: 'destructive' as const }] : []),
+        ]
+      );
+    }
+  };
 
   
 
@@ -291,16 +403,24 @@ export default function ProfileEditScreen() {
       >
         <View style={styles.avatarSection}>
           <View style={styles.avatarContainer}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>
-                {firstName[0]}{lastName[0]}
-              </Text>
-            </View>
-            <TouchableOpacity style={styles.cameraButton}>
+            {profilePhoto ? (
+              <Image source={{ uri: profilePhoto }} style={styles.avatarImage} />
+            ) : (
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>
+                  {firstName[0]}{lastName[0]}
+                </Text>
+              </View>
+            )}
+            <TouchableOpacity style={styles.cameraButton} onPress={handleChangePhoto}>
               <Camera size={18} color={Colors.background} />
             </TouchableOpacity>
           </View>
-          <Text style={styles.changePhotoText}>Fotoğraf Değiştir</Text>
+          <TouchableOpacity onPress={handleChangePhoto}>
+            <Text style={styles.changePhotoText}>
+              {profilePhoto ? 'Fotoğrafı Değiştir' : 'Fotoğraf Ekle'}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.section}>
@@ -711,6 +831,13 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: Colors.secondary,
+  },
+  avatarImage: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
     borderWidth: 3,
     borderColor: Colors.secondary,
   },

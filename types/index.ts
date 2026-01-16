@@ -88,6 +88,7 @@ export interface Ambassador {
   pendingFirstName?: string | null;
   pendingLastName?: string | null;
   nameChangeRequestDate?: string | null;
+  profilePhoto?: string | null;
   privacyPolicyConsent: boolean;
   privacyPolicyConsentDate?: string;
   termsConsent: boolean;

@@ -279,6 +279,7 @@ export const MOCK_CURRENT_AMBASSADOR: Ambassador = {
   pendingFirstName: null,
   pendingLastName: null,
   nameChangeRequestDate: null,
+  profilePhoto: null,
   privacyPolicyConsent: true,
   privacyPolicyConsentDate: '2023-06-15',
   termsConsent: true,
