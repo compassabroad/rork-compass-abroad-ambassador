@@ -8,6 +8,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import Colors from "@/constants/colors";
 import { NotificationProvider } from "@/contexts/NotificationContext";
 import { ExchangeRateProvider } from "@/contexts/ExchangeRateContext";
+import { SocialMediaProvider } from "@/contexts/SocialMediaContext";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -107,10 +108,12 @@ export default function RootLayout() {
     <QueryClientProvider client={queryClient}>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <ExchangeRateProvider>
-            <NotificationProvider>
-              <StatusBar style="light" />
-              <RootLayoutNav />
-            </NotificationProvider>
+            <SocialMediaProvider>
+              <NotificationProvider>
+                <StatusBar style="light" />
+                <RootLayoutNav />
+              </NotificationProvider>
+            </SocialMediaProvider>
           </ExchangeRateProvider>
       </GestureHandlerRootView>
     </QueryClientProvider>

@@ -39,8 +39,9 @@ import HowItWorksModal from '@/components/HowItWorksModal';
 
 import Colors from '@/constants/colors';
 import { useExchangeRate } from '@/contexts/ExchangeRateContext';
-import { MOCK_EARNINGS, MOCK_STUDENTS, MOCK_CURRENT_AMBASSADOR, PROGRAMS, MOCK_SOCIAL_MEDIA_LINKS } from '@/mocks/data';
-import { SocialMediaLinks, STAGE_LABELS, AMBASSADOR_TYPE_LABELS } from '@/types';
+import { useSocialMedia } from '@/contexts/SocialMediaContext';
+import { MOCK_EARNINGS, MOCK_STUDENTS, MOCK_CURRENT_AMBASSADOR, PROGRAMS } from '@/mocks/data';
+import { STAGE_LABELS, AMBASSADOR_TYPE_LABELS } from '@/types';
 
 export default function DashboardScreen() {
   const insets = useSafeAreaInsets();
@@ -52,9 +53,9 @@ export default function DashboardScreen() {
   const [showAmbassadorModal, setShowAmbassadorModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showHowItWorksModal, setShowHowItWorksModal] = useState(false);
-  const [socialLinks] = useState<SocialMediaLinks>(MOCK_SOCIAL_MEDIA_LINKS);
   
   const { rate: exchangeRate, isLoading: isLoadingRate, fetchRate, formattedRate, lastUpdatedText } = useExchangeRate();
+  const { links: socialLinks } = useSocialMedia();
 
   const handleAddStudent = (student: NewStudent) => {
     console.log('New student added:', student);

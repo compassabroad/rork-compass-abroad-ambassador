@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -23,7 +23,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 
 import Colors from '@/constants/colors';
-import { MOCK_SOCIAL_MEDIA_LINKS } from '@/mocks/data';
+import { useSocialMedia } from '@/contexts/SocialMediaContext';
 import { SocialMediaLinks } from '@/types';
 
 type SocialPlatform = keyof SocialMediaLinks;
@@ -69,22 +69,32 @@ const SOCIAL_INPUTS: SocialInput[] = [
 
 export default function SocialMediaScreen() {
   const router = useRouter();
-  const [links, setLinks] = useState<SocialMediaLinks>({ ...MOCK_SOCIAL_MEDIA_LINKS });
+  const { links: savedLinks, updateLinks, resetLinks } = useSocialMedia();
+  const [links, setLinks] = useState<SocialMediaLinks>(savedLinks);
   const [hasChanges, setHasChanges] = useState(false);
+
+  useEffect(() => {
+    setLinks(savedLinks);
+  }, [savedLinks]);
 
   const handleLinkChange = (key: SocialPlatform, value: string) => {
     setLinks(prev => ({ ...prev, [key]: value }));
     setHasChanges(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     console.log('Saving social media links:', links);
-    Alert.alert(
-      'Başarılı',
-      'Sosyal medya linkleri güncellendi.',
-      [{ text: 'Tamam' }]
-    );
-    setHasChanges(false);
+    const success = await updateLinks(links);
+    if (success) {
+      Alert.alert(
+        'Başarılı',
+        'Sosyal medya linkleri güncellendi.',
+        [{ text: 'Tamam' }]
+      );
+      setHasChanges(false);
+    } else {
+      Alert.alert('Hata', 'Linkler kaydedilirken bir hata oluştu.');
+    }
   };
 
   const handleReset = () => {
@@ -96,9 +106,11 @@ export default function SocialMediaScreen() {
         {
           text: 'Sıfırla',
           style: 'destructive',
-          onPress: () => {
-            setLinks({ ...MOCK_SOCIAL_MEDIA_LINKS });
-            setHasChanges(false);
+          onPress: async () => {
+            const success = await resetLinks();
+            if (success) {
+              setHasChanges(false);
+            }
           },
         },
       ]
