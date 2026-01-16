@@ -28,8 +28,9 @@ import {
 import PaymentRequestModal, { WithdrawalRequest } from '@/components/PaymentRequestModal';
 import Colors from '@/constants/colors';
 import { useExchangeRate } from '@/contexts/ExchangeRateContext';
-import { MOCK_EARNINGS, MOCK_TRANSACTIONS, PROGRAMS } from '@/mocks/data';
+import { MOCK_STUDENTS, MOCK_CURRENT_AMBASSADOR, PROGRAMS } from '@/mocks/data';
 import { TransactionType, TRANSACTION_TYPE_LABELS } from '@/types';
+import { calculateTotalEarnings, calculateCommissionBreakdown, getAmbassadorCommissionForProgram } from '@/utils/commissionCalculator';
 
 const getTransactionIcon = (type: TransactionType) => {
   const iconProps = { size: 18, color: Colors.text };
@@ -60,6 +61,64 @@ export default function FinancesScreen() {
   
   const { rate: exchangeRate, fetchRate } = useExchangeRate();
 
+  const ambassadorId = MOCK_CURRENT_AMBASSADOR.id;
+  const earnings = calculateTotalEarnings(MOCK_STUDENTS, ambassadorId);
+
+  const transactions = MOCK_STUDENTS.flatMap((student) => {
+    const breakdown = calculateCommissionBreakdown(student, ambassadorId);
+    const txns: {
+      id: string;
+      type: TransactionType;
+      amountUSD: number;
+      date: string;
+      studentName: string;
+      studentId: string;
+      description: string;
+      status: 'completed' | 'pending';
+    }[] = [];
+
+    if (breakdown.registrationEarned) {
+      txns.push({
+        id: `reg-${student.id}`,
+        type: 'student_registration',
+        amountUSD: breakdown.registrationCommissionUSD,
+        date: student.registeredAt,
+        studentName: student.name,
+        studentId: student.id,
+        description: `${student.name} - Kayıt Komisyonu`,
+        status: 'completed',
+      });
+    }
+
+    if (breakdown.visaApprovedEarned) {
+      txns.push({
+        id: `visa-${student.id}`,
+        type: 'student_visa_approved',
+        amountUSD: breakdown.visaApprovedCommissionUSD,
+        date: student.updatedAt,
+        studentName: student.name,
+        studentId: student.id,
+        description: `${student.name} - Vize Onay Komisyonu`,
+        status: 'completed',
+      });
+    }
+
+    if (breakdown.departedEarned) {
+      txns.push({
+        id: `dep-${student.id}`,
+        type: 'student_departed',
+        amountUSD: breakdown.departedCommissionUSD,
+        date: student.updatedAt,
+        studentName: student.name,
+        studentId: student.id,
+        description: `${student.name} - Uçuş Komisyonu`,
+        status: 'completed',
+      });
+    }
+
+    return txns;
+  }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
   const onRefresh = () => {
     setRefreshing(true);
     fetchRate();
@@ -85,13 +144,20 @@ export default function FinancesScreen() {
     });
   };
 
-  const availableUSD = MOCK_EARNINGS.totalUSD - MOCK_EARNINGS.pendingUSD;
-
-  const programEarnings = PROGRAMS.slice(0, 5).map(program => ({
-    program,
-    earned: Math.floor(Math.random() * 5) * program.commission,
-    count: Math.floor(Math.random() * 5),
-  })).filter(p => p.count > 0);
+  const programEarnings = PROGRAMS.map(program => {
+    const studentsInProgram = MOCK_STUDENTS.filter(s => s.program === program.id);
+    const earned = studentsInProgram.reduce((sum, s) => {
+      const breakdown = calculateCommissionBreakdown(s, ambassadorId);
+      return sum + breakdown.earnedCommissionUSD;
+    }, 0);
+    const ambassadorRate = getAmbassadorCommissionForProgram(ambassadorId, program.id);
+    return {
+      program,
+      earned,
+      count: studentsInProgram.length,
+      ambassadorRate,
+    };
+  }).filter(p => p.count > 0);
 
   return (
     <View style={styles.container}>
@@ -130,12 +196,12 @@ export default function FinancesScreen() {
             <View style={styles.summaryAmounts}>
               <View style={styles.amountRow}>
                 <Text style={styles.amountLabel}>USD</Text>
-                <Text style={styles.amountValuePrimary}>{formatCurrency(MOCK_EARNINGS.totalUSD, 'USD')}</Text>
+                <Text style={styles.amountValuePrimary}>{formatCurrency(earnings.totalEarnedUSD, 'USD')}</Text>
               </View>
               <View style={styles.amountDivider} />
               <View style={styles.amountRow}>
                 <Text style={styles.amountLabel}>TRY</Text>
-                <Text style={styles.amountValueSecondary}>{formatCurrency(MOCK_EARNINGS.totalUSD * exchangeRate, 'TRY')}</Text>
+                <Text style={styles.amountValueSecondary}>{formatCurrency(earnings.totalEarnedUSD * exchangeRate, 'TRY')}</Text>
               </View>
             </View>
 
@@ -147,7 +213,7 @@ export default function FinancesScreen() {
                 <View>
                   <Text style={styles.statLabel}>Çekilebilir</Text>
                   <Text style={[styles.statValue, { color: Colors.success }]}>
-                    {formatCurrency(availableUSD, 'USD')} / {formatCurrency(availableUSD * exchangeRate, 'TRY')}
+                    {formatCurrency(earnings.availableUSD, 'USD')} / {formatCurrency(earnings.availableUSD * exchangeRate, 'TRY')}
                   </Text>
                 </View>
               </View>
@@ -159,7 +225,7 @@ export default function FinancesScreen() {
                 <View>
                   <Text style={styles.statLabel}>Bekleyen</Text>
                   <Text style={[styles.statValue, { color: Colors.warning }]}>
-                    {formatCurrency(MOCK_EARNINGS.pendingUSD, 'USD')} / {formatCurrency(MOCK_EARNINGS.pendingUSD * exchangeRate, 'TRY')}
+                    {formatCurrency(earnings.totalPendingUSD, 'USD')} / {formatCurrency(earnings.totalPendingUSD * exchangeRate, 'TRY')}
                   </Text>
                 </View>
               </View>
@@ -187,15 +253,14 @@ export default function FinancesScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>İşlem Geçmişi</Text>
           
-          {MOCK_TRANSACTIONS.map((transaction) => {
-            const isWithdrawal = transaction.type === 'payment_withdrawal';
+          {transactions.map((transaction) => {
             const isPositive = transaction.amountUSD > 0;
             
             return (
               <TouchableOpacity key={transaction.id} style={styles.transactionCard} activeOpacity={0.7}>
                 <View style={[
                   styles.transactionIcon,
-                  { backgroundColor: isWithdrawal ? Colors.error + '20' : Colors.success + '20' }
+                  { backgroundColor: Colors.success + '20' }
                 ]}>
                   {getTransactionIcon(transaction.type)}
                 </View>
@@ -205,7 +270,7 @@ export default function FinancesScreen() {
                     {TRANSACTION_TYPE_LABELS[transaction.type].tr}
                   </Text>
                   <Text style={styles.transactionDescription} numberOfLines={1}>
-                    {transaction.studentName || transaction.description}
+                    {transaction.description}
                   </Text>
                   <Text style={styles.transactionDate}>{formatDate(transaction.date)}</Text>
                 </View>
@@ -248,9 +313,12 @@ export default function FinancesScreen() {
                   <View style={styles.programEarningRow}>
                     <View style={styles.programInfo}>
                       <Text style={styles.programName}>{item.program.name}</Text>
-                      <Text style={styles.programCount}>{item.count} öğrenci</Text>
+                      <Text style={styles.programCount}>{item.count} öğrenci • Oranınız: ${item.ambassadorRate}</Text>
                     </View>
-                    <Text style={styles.programEarned}>{formatCurrency(item.earned, 'USD')}</Text>
+                    <View style={styles.programEarnedContainer}>
+                      <Text style={styles.programEarned}>{formatCurrency(item.earned, 'USD')}</Text>
+                      <Text style={styles.programEarnedTRY}>{formatCurrency(item.earned * exchangeRate, 'TRY')}</Text>
+                    </View>
                   </View>
                   {index < programEarnings.length - 1 && <View style={styles.programDivider} />}
                 </View>
@@ -502,6 +570,14 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700' as const,
     color: Colors.secondary,
+  },
+  programEarnedContainer: {
+    alignItems: 'flex-end' as const,
+  },
+  programEarnedTRY: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    marginTop: 2,
   },
   programDivider: {
     height: 1,

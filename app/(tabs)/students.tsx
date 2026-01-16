@@ -17,8 +17,10 @@ import {
 import { useRouter } from 'expo-router';
 
 import Colors from '@/constants/colors';
-import { MOCK_STUDENTS, PROGRAMS } from '@/mocks/data';
+import { useExchangeRate } from '@/contexts/ExchangeRateContext';
+import { MOCK_STUDENTS, PROGRAMS, MOCK_CURRENT_AMBASSADOR } from '@/mocks/data';
 import { StudentStage, STAGE_LABELS, Student } from '@/types';
+import { calculateCommissionBreakdown } from '@/utils/commissionCalculator';
 
 const STAGES: StudentStage[] = ['pre_payment', 'registered', 'documents_completed', 'visa_applied', 'visa_approved', 'visa_rejected', 'orientation', 'departed'];
 
@@ -27,6 +29,8 @@ export default function StudentsScreen() {
   const router = useRouter();
   const [selectedStage, setSelectedStage] = useState<StudentStage | 'all'>('all');
   const scrollViewRef = useRef<ScrollView>(null);
+  const { rate: exchangeRate } = useExchangeRate();
+  const ambassadorId = MOCK_CURRENT_AMBASSADOR.id;
 
   const filteredStudents = selectedStage === 'all'
     ? MOCK_STUDENTS
@@ -38,6 +42,7 @@ export default function StudentsScreen() {
 
   const renderStudent = (student: Student) => {
     const program = PROGRAMS.find(p => p.id === student.program);
+    const breakdown = calculateCommissionBreakdown(student, ambassadorId);
     
     return (
       <TouchableOpacity 
@@ -116,6 +121,11 @@ export default function StudentsScreen() {
             <Phone size={16} color={Colors.primary} />
             <Text style={styles.contactButtonText}>İletişim</Text>
           </TouchableOpacity>
+          <View style={styles.commissionInfo}>
+            <Text style={styles.commissionLabel}>Kazanılan:</Text>
+            <Text style={styles.commissionValue}>${breakdown.earnedCommissionUSD}</Text>
+            <Text style={styles.commissionValueTRY}>₺{(breakdown.earnedCommissionUSD * exchangeRate).toLocaleString('tr-TR')}</Text>
+          </View>
         </View>
       </TouchableOpacity>
     );
@@ -392,6 +402,25 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: Colors.primary,
+  },
+  commissionInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginLeft: 'auto' as const,
+  },
+  commissionLabel: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+  },
+  commissionValue: {
+    fontSize: 14,
+    fontWeight: '700' as const,
+    color: Colors.secondary,
+  },
+  commissionValueTRY: {
+    fontSize: 12,
+    color: Colors.textMuted,
   },
   emptyState: {
     flex: 1,

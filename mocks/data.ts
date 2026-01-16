@@ -802,6 +802,14 @@ export const MOCK_PROGRAM_COMMISSIONS: ProgramCommission[] = [
 ];
 
 export const MOCK_AMBASSADOR_COMMISSIONS: AmbassadorCommission[] = [
+  { ambassadorId: 'current', programId: 'bachelor', customCommissionUSD: 750, useCustom: true },
+  { ambassadorId: 'current', programId: 'masters', customCommissionUSD: 950, useCustom: true },
+  { ambassadorId: 'current', programId: 'work_and_study', customCommissionUSD: 280, useCustom: true },
+  { ambassadorId: 'current', programId: 'camp_usa', customCommissionUSD: 230, useCustom: true },
+  { ambassadorId: 'current', programId: 'language_education', customCommissionUSD: 180, useCustom: true },
+  { ambassadorId: 'current', programId: 'visa_consulting', customCommissionUSD: 140, useCustom: true },
+  { ambassadorId: 'current', programId: 'high_school', customCommissionUSD: 550, useCustom: true },
+  { ambassadorId: 'current', programId: 'internship', customCommissionUSD: 380, useCustom: true },
   { ambassadorId: 'sub1', programId: 'camp_usa', customCommissionUSD: 280, useCustom: true },
   { ambassadorId: 'sub1', programId: 'bachelor', customCommissionUSD: 900, useCustom: true },
   { ambassadorId: 'sub1', programId: 'masters', customCommissionUSD: 1100, useCustom: true },

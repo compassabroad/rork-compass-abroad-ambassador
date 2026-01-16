@@ -29,20 +29,7 @@ import Colors from '@/constants/colors';
 import { useExchangeRate } from '@/contexts/ExchangeRateContext';
 import { MOCK_STUDENTS, MOCK_STUDENT_PIPELINES, PROGRAMS, MOCK_CURRENT_AMBASSADOR } from '@/mocks/data';
 import { STAGE_LABELS, StudentStage } from '@/types';
-
-const calculateEarnedCommission = (stage: StudentStage, totalCommission: number): number => {
-  let percent = 0;
-  if (['registered', 'documents_completed', 'visa_applied'].includes(stage)) {
-    percent = 25;
-  } else if (['visa_approved', 'orientation'].includes(stage)) {
-    percent = 50;
-  } else if (stage === 'departed') {
-    percent = 100;
-  } else if (stage === 'visa_rejected') {
-    percent = 25;
-  }
-  return Math.floor(totalCommission * (percent / 100));
-};
+import { calculateCommissionBreakdown, getAmbassadorCommissionForProgram } from '@/utils/commissionCalculator';
 
 export default function StudentDetailScreen() {
   const insets = useSafeAreaInsets();
@@ -68,8 +55,10 @@ export default function StudentDetailScreen() {
     );
   }
 
+  const ambassadorId = MOCK_CURRENT_AMBASSADOR.id;
+  const breakdown = calculateCommissionBreakdown(student, ambassadorId);
+  const ambassadorRate = getAmbassadorCommissionForProgram(ambassadorId, student.program);
   const isRejected = student.stage === 'visa_rejected';
-  const earnedCommission = program ? calculateEarnedCommission(student.stage, program.commission) : 0;
 
   const handleCall = () => {
     const phoneUrl = `tel:${student.phone.replace(/\s/g, '')}`;
@@ -263,14 +252,63 @@ export default function StudentDetailScreen() {
             <View style={[styles.commissionIcon, { backgroundColor: Colors.secondary + '20' }]}>
               <DollarSign size={20} color={Colors.secondary} />
             </View>
-            <Text style={styles.cardTitle}>Kazanılan Komisyon</Text>
+            <Text style={styles.cardTitle}>Komisyon Detayı</Text>
           </View>
-          <Text style={styles.commissionAmount}>${earnedCommission}</Text>
-          <Text style={styles.commissionAmountTRY}>
-            ₺{(earnedCommission * exchangeRate).toLocaleString('tr-TR')}
-          </Text>
+          
+          <View style={styles.commissionRateRow}>
+            <Text style={styles.commissionRateLabel}>Program:</Text>
+            <Text style={styles.commissionRateValue}>{program?.name}</Text>
+          </View>
+          <View style={styles.commissionRateRow}>
+            <Text style={styles.commissionRateLabel}>Komisyon Oranınız:</Text>
+            <Text style={styles.commissionRateValue}>${ambassadorRate}</Text>
+          </View>
+          
+          <View style={styles.commissionDivider} />
+          
+          <View style={styles.commissionBreakdownRow}>
+            <View style={styles.commissionBreakdownItem}>
+              <Text style={styles.breakdownLabel}>Kayıt (25%)</Text>
+              <Text style={styles.breakdownAmount}>${breakdown.registrationCommissionUSD}</Text>
+              <View style={[styles.breakdownStatus, breakdown.registrationEarned && styles.breakdownStatusEarned]}>
+                <Text style={[styles.breakdownStatusText, breakdown.registrationEarned && styles.breakdownStatusTextEarned]}>
+                  {breakdown.registrationEarned ? '✓ Kazanıldı' : 'Bekliyor'}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.commissionBreakdownItem}>
+              <Text style={styles.breakdownLabel}>Vize Onay (25%)</Text>
+              <Text style={styles.breakdownAmount}>${breakdown.visaApprovedCommissionUSD}</Text>
+              <View style={[styles.breakdownStatus, breakdown.visaApprovedEarned && styles.breakdownStatusEarned, isRejected && styles.breakdownStatusRejected]}>
+                <Text style={[styles.breakdownStatusText, breakdown.visaApprovedEarned && styles.breakdownStatusTextEarned, isRejected && styles.breakdownStatusTextRejected]}>
+                  {isRejected ? '✗ Red' : breakdown.visaApprovedEarned ? '✓ Kazanıldı' : 'Bekliyor'}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.commissionBreakdownItem}>
+              <Text style={styles.breakdownLabel}>Uçuş (50%)</Text>
+              <Text style={styles.breakdownAmount}>${breakdown.departedCommissionUSD}</Text>
+              <View style={[styles.breakdownStatus, breakdown.departedEarned && styles.breakdownStatusEarned, isRejected && styles.breakdownStatusRejected]}>
+                <Text style={[styles.breakdownStatusText, breakdown.departedEarned && styles.breakdownStatusTextEarned, isRejected && styles.breakdownStatusTextRejected]}>
+                  {isRejected ? '✗ Red' : breakdown.departedEarned ? '✓ Kazanıldı' : 'Bekliyor'}
+                </Text>
+              </View>
+            </View>
+          </View>
+          
+          <View style={styles.commissionDivider} />
+          
+          <View style={styles.commissionTotalRow}>
+            <Text style={styles.commissionTotalLabel}>Kazanılan:</Text>
+            <View style={styles.commissionTotalAmounts}>
+              <Text style={styles.commissionAmount}>${breakdown.earnedCommissionUSD}</Text>
+              <Text style={styles.commissionAmountTRY}>
+                ₺{(breakdown.earnedCommissionUSD * exchangeRate).toLocaleString('tr-TR')}
+              </Text>
+            </View>
+          </View>
           <Text style={styles.commissionNote}>
-            Toplam potansiyel: ${program?.commission || 0} (₺{((program?.commission || 0) * exchangeRate).toLocaleString('tr-TR')})
+            Toplam potansiyel: ${ambassadorRate} (₺{(ambassadorRate * exchangeRate).toLocaleString('tr-TR')})
           </Text>
         </View>
 
@@ -582,6 +620,89 @@ const styles = StyleSheet.create({
   commissionNote: {
     fontSize: 13,
     color: Colors.textSecondary,
+  },
+  commissionRateRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  commissionRateLabel: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+  },
+  commissionRateValue: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: Colors.text,
+  },
+  commissionDivider: {
+    height: 1,
+    backgroundColor: Colors.border,
+    marginVertical: 12,
+  },
+  commissionBreakdownRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  commissionBreakdownItem: {
+    flex: 1,
+    alignItems: 'center',
+    padding: 8,
+    backgroundColor: Colors.surface,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  breakdownLabel: {
+    fontSize: 11,
+    color: Colors.textSecondary,
+    marginBottom: 4,
+    textAlign: 'center' as const,
+  },
+  breakdownAmount: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+    color: Colors.text,
+    marginBottom: 6,
+  },
+  breakdownStatus: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: Colors.warning + '20',
+  },
+  breakdownStatusEarned: {
+    backgroundColor: Colors.success + '20',
+  },
+  breakdownStatusRejected: {
+    backgroundColor: Colors.error + '20',
+  },
+  breakdownStatusText: {
+    fontSize: 10,
+    fontWeight: '600' as const,
+    color: Colors.warning,
+  },
+  breakdownStatusTextEarned: {
+    color: Colors.success,
+  },
+  breakdownStatusTextRejected: {
+    color: Colors.error,
+  },
+  commissionTotalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  commissionTotalLabel: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: Colors.text,
+  },
+  commissionTotalAmounts: {
+    alignItems: 'flex-end',
   },
   contactActions: {
     flexDirection: 'row',

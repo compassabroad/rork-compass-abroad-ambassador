@@ -40,8 +40,9 @@ import HowItWorksModal from '@/components/HowItWorksModal';
 import Colors from '@/constants/colors';
 import { useExchangeRate } from '@/contexts/ExchangeRateContext';
 import { useSocialMedia } from '@/contexts/SocialMediaContext';
-import { MOCK_EARNINGS, MOCK_STUDENTS, MOCK_CURRENT_AMBASSADOR, PROGRAMS } from '@/mocks/data';
+import { MOCK_STUDENTS, MOCK_CURRENT_AMBASSADOR, PROGRAMS } from '@/mocks/data';
 import { STAGE_LABELS, AMBASSADOR_TYPE_LABELS } from '@/types';
+import { calculateTotalEarnings } from '@/utils/commissionCalculator';
 
 export default function DashboardScreen() {
   const insets = useSafeAreaInsets();
@@ -56,6 +57,9 @@ export default function DashboardScreen() {
   
   const { rate: exchangeRate, isLoading: isLoadingRate, fetchRate, formattedRate, lastUpdatedText } = useExchangeRate();
   const { links: socialLinks } = useSocialMedia();
+
+  const ambassadorId = MOCK_CURRENT_AMBASSADOR.id;
+  const earnings = calculateTotalEarnings(MOCK_STUDENTS, ambassadorId);
 
   const handleAddStudent = (student: NewStudent) => {
     console.log('New student added:', student);
@@ -174,12 +178,12 @@ export default function DashboardScreen() {
             <View style={styles.earningsAmounts}>
               <View style={styles.earningsRow}>
                 <Text style={styles.earningsCurrency}>USD</Text>
-                <Text style={styles.earningsValue}>{formatCurrency(MOCK_EARNINGS.totalUSD, 'USD')}</Text>
+                <Text style={styles.earningsValue}>{formatCurrency(earnings.totalEarnedUSD, 'USD')}</Text>
               </View>
               <View style={styles.earningsDivider} />
               <View style={styles.earningsRow}>
                 <Text style={styles.earningsCurrency}>TRY</Text>
-                <Text style={styles.earningsValueTRY}>{formatCurrency(MOCK_EARNINGS.totalUSD * exchangeRate, 'TRY')}</Text>
+                <Text style={styles.earningsValueTRY}>{formatCurrency(earnings.totalEarnedUSD * exchangeRate, 'TRY')}</Text>
               </View>
             </View>
 
@@ -187,13 +191,13 @@ export default function DashboardScreen() {
               <View style={styles.earningsSubItem}>
                 <Clock size={14} color={Colors.warning} />
                 <Text style={styles.earningsSubLabel}>Bekleyen</Text>
-                <Text style={styles.earningsSubValue}>{formatCurrency(MOCK_EARNINGS.pendingUSD, 'USD')} / {formatCurrency(MOCK_EARNINGS.pendingUSD * exchangeRate, 'TRY')}</Text>
+                <Text style={styles.earningsSubValue}>{formatCurrency(earnings.totalPendingUSD, 'USD')} / {formatCurrency(earnings.totalPendingUSD * exchangeRate, 'TRY')}</Text>
               </View>
               <View style={styles.earningsSubItem}>
                 <TrendingUp size={14} color={Colors.success} />
-                <Text style={styles.earningsSubLabel}>Bu Ay</Text>
+                <Text style={styles.earningsSubLabel}>Çekilebilir</Text>
                 <Text style={[styles.earningsSubValue, { color: Colors.success }]}>
-                  {formatCurrency(MOCK_EARNINGS.thisMonthUSD, 'USD')}
+                  {formatCurrency(earnings.availableUSD, 'USD')}
                 </Text>
               </View>
             </View>
