@@ -10,10 +10,12 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { X, User, Mail, Phone, BookOpen, Globe, FileText, ChevronDown, Send, CheckCircle, Clock } from 'lucide-react-native';
 import Colors from '@/constants/colors';
-import { PROGRAMS } from '@/mocks/data';
+import { PROGRAMS, MOCK_CURRENT_AMBASSADOR } from '@/mocks/data';
+import { trpc } from '@/lib/trpc';
 import { ProgramType } from '@/types';
 
 interface StudentAddModalProps {
@@ -84,6 +86,15 @@ export default function StudentAddModal({ visible, onClose, onSubmit }: StudentA
   const [showSuccess, setShowSuccess] = useState(false);
   const [submittedEmail, setSubmittedEmail] = useState('');
 
+  const sendInvitationMutation = trpc.email.sendStudentInvitation.useMutation({
+    onSuccess: () => {
+      console.log('[StudentAddModal] Invitation email sent successfully');
+    },
+    onError: (error) => {
+      console.error('[StudentAddModal] Failed to send invitation email:', error);
+    },
+  });
+
   const resetForm = () => {
     setName('');
     setEmail('');
@@ -95,7 +106,7 @@ export default function StudentAddModal({ visible, onClose, onSubmit }: StudentA
     setSubmittedEmail('');
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!name.trim()) {
       Alert.alert('Hata', 'Lütfen öğrenci adını girin');
       return;
@@ -124,21 +135,39 @@ export default function StudentAddModal({ visible, onClose, onSubmit }: StudentA
 
     const token = generateToken();
     const now = new Date().toISOString();
+    const selectedProgram = PROGRAMS.find(p => p.id === program);
 
-    onSubmit({
-      name: name.trim(),
-      email: email.trim(),
-      phone: phone.trim(),
-      program,
-      country,
-      notes: notes.trim(),
-      invitationStatus: 'pending_kvkk',
-      invitationToken: token,
-      invitedAt: now,
-    });
+    try {
+      await sendInvitationMutation.mutateAsync({
+        studentName: name.trim(),
+        studentEmail: email.trim(),
+        invitationToken: token,
+        ambassadorName: MOCK_CURRENT_AMBASSADOR.name,
+        program: selectedProgram?.name || program,
+      });
 
-    setSubmittedEmail(email.trim());
-    setShowSuccess(true);
+      onSubmit({
+        name: name.trim(),
+        email: email.trim(),
+        phone: phone.trim(),
+        program,
+        country,
+        notes: notes.trim(),
+        invitationStatus: 'pending_kvkk',
+        invitationToken: token,
+        invitedAt: now,
+      });
+
+      setSubmittedEmail(email.trim());
+      setShowSuccess(true);
+    } catch (error) {
+      console.error('[StudentAddModal] Error sending invitation:', error);
+      Alert.alert(
+        'Hata',
+        'Davet e-postası gönderilemedi. Lütfen tekrar deneyin.',
+        [{ text: 'Tamam' }]
+      );
+    }
   };
 
   const handleClose = () => {
@@ -399,9 +428,19 @@ export default function StudentAddModal({ visible, onClose, onSubmit }: StudentA
           <TouchableOpacity style={styles.cancelButton} onPress={handleClose}>
             <Text style={styles.cancelButtonText}>İptal</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
-            <Send size={18} color={Colors.primaryDark} style={{ marginRight: 8 }} />
-            <Text style={styles.submitButtonText}>Davet Gönder</Text>
+          <TouchableOpacity 
+            style={[styles.submitButton, sendInvitationMutation.isPending && styles.submitButtonDisabled]} 
+            onPress={handleSubmit}
+            disabled={sendInvitationMutation.isPending}
+          >
+            {sendInvitationMutation.isPending ? (
+              <ActivityIndicator size="small" color={Colors.primaryDark} />
+            ) : (
+              <>
+                <Send size={18} color={Colors.primaryDark} style={{ marginRight: 8 }} />
+                <Text style={styles.submitButtonText}>Davet Gönder</Text>
+              </>
+            )}
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -614,6 +653,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700' as const,
     color: Colors.primaryDark,
+  },
+  submitButtonDisabled: {
+    opacity: 0.7,
   },
   successContainer: {
     flex: 1,

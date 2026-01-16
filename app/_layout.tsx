@@ -9,6 +9,7 @@ import Colors from "@/constants/colors";
 import { NotificationProvider } from "@/contexts/NotificationContext";
 import { ExchangeRateProvider } from "@/contexts/ExchangeRateContext";
 import { SocialMediaProvider } from "@/contexts/SocialMediaContext";
+import { trpc, trpcClient } from "@/lib/trpc";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -105,9 +106,10 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <ExchangeRateProvider>
+    <trpc.Provider client={trpcClient} queryClient={queryClient}>
+      <QueryClientProvider client={queryClient}>
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <ExchangeRateProvider>
             <SocialMediaProvider>
               <NotificationProvider>
                 <StatusBar style="light" />
@@ -115,7 +117,8 @@ export default function RootLayout() {
               </NotificationProvider>
             </SocialMediaProvider>
           </ExchangeRateProvider>
-      </GestureHandlerRootView>
-    </QueryClientProvider>
+        </GestureHandlerRootView>
+      </QueryClientProvider>
+    </trpc.Provider>
   );
 }
