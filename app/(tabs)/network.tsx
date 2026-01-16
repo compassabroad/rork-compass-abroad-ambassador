@@ -15,6 +15,8 @@ import {
   TrendingUp,
   Star,
   Award,
+  Percent,
+  DollarSign,
 } from 'lucide-react-native';
 
 import Colors from '@/constants/colors';
@@ -114,6 +116,16 @@ export default function NetworkScreen() {
   const totalEarningsInNetwork = MOCK_CURRENT_AMBASSADOR.totalEarningsUSD +
     MOCK_SUB_AMBASSADORS.reduce((sum, a) => sum + a.totalEarningsUSD, 0);
 
+  const directSubAmbassadors = MOCK_SUB_AMBASSADORS.filter(
+    a => a.parentId === MOCK_CURRENT_AMBASSADOR.id
+  );
+  
+  const networkCommissionRate = MOCK_CURRENT_AMBASSADOR.networkCommissionRate || 10;
+  const totalNetworkCommission = directSubAmbassadors.reduce(
+    (sum, sub) => sum + (sub.totalEarningsUSD * networkCommissionRate) / 100,
+    0
+  );
+
   const renderNode = (ambassador: Ambassador, level: number) => {
     const children = getChildren(ambassador.id);
     const isExpanded = expandedNodes.has(ambassador.id);
@@ -170,6 +182,42 @@ export default function NetworkScreen() {
           </View>
         </View>
       </View>
+
+      {directSubAmbassadors.length > 0 && (
+        <View style={styles.networkCommissionCard}>
+          <View style={styles.networkCommissionHeader}>
+            <View style={styles.networkCommissionIcon}>
+              <Percent size={20} color={Colors.secondary} />
+            </View>
+            <View style={styles.networkCommissionInfo}>
+              <Text style={styles.networkCommissionTitle}>Ağ Komisyon Kazançınız</Text>
+              <Text style={styles.networkCommissionDesc}>
+                Alt elçilerinizin kazançlarından %{networkCommissionRate} payınız
+              </Text>
+            </View>
+          </View>
+          <View style={styles.networkCommissionAmount}>
+            <DollarSign size={24} color={Colors.secondary} />
+            <Text style={styles.networkCommissionValue}>
+              {totalNetworkCommission.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+            </Text>
+          </View>
+          <View style={styles.networkCommissionBreakdown}>
+            <Text style={styles.networkCommissionBreakdownTitle}>Elçi Bazlı Dağılım</Text>
+            {directSubAmbassadors.map(sub => {
+              const commission = (sub.totalEarningsUSD * networkCommissionRate) / 100;
+              return (
+                <View key={sub.id} style={styles.networkCommissionItem}>
+                  <Text style={styles.networkCommissionItemName}>{sub.name}</Text>
+                  <Text style={styles.networkCommissionItemAmount}>
+                    ${sub.totalEarningsUSD.toLocaleString()} × %{networkCommissionRate} = ${commission.toLocaleString()}
+                  </Text>
+                </View>
+              );
+            })}
+          </View>
+        </View>
+      )}
 
       <View style={styles.treeHeader}>
         <Text style={styles.treeTitle}>Ağaç Görünümü</Text>
@@ -257,6 +305,85 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: Colors.textSecondary,
     textAlign: 'center',
+  },
+  networkCommissionCard: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    backgroundColor: Colors.secondary + '15',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: Colors.secondary + '30',
+  },
+  networkCommissionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  networkCommissionIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: Colors.secondary + '30',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  networkCommissionInfo: {
+    flex: 1,
+  },
+  networkCommissionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.text,
+    marginBottom: 2,
+  },
+  networkCommissionDesc: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+  },
+  networkCommissionAmount: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    gap: 4,
+  },
+  networkCommissionValue: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: Colors.secondary,
+  },
+  networkCommissionBreakdown: {
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    padding: 12,
+  },
+  networkCommissionBreakdownTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+    marginBottom: 10,
+  },
+  networkCommissionItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  networkCommissionItemName: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: Colors.text,
+  },
+  networkCommissionItemAmount: {
+    fontSize: 12,
+    color: Colors.textMuted,
   },
   treeHeader: {
     flexDirection: 'row',

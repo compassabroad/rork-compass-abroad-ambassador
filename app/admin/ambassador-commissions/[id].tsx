@@ -15,6 +15,8 @@ import {
   ArrowLeft,
   Save,
   Award,
+  Percent,
+  Users,
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -59,6 +61,9 @@ export default function AmbassadorCommissionsScreen() {
 
   const [commissions, setCommissions] = useState<CommissionState>(initialState);
   const [hasChanges, setHasChanges] = useState(false);
+  const [networkCommissionRate, setNetworkCommissionRate] = useState<number>(
+    ambassador?.networkCommissionRate ?? 10
+  );
 
   const getDefaultCommission = useCallback((programId: ProgramType): number => {
     const pc = MOCK_PROGRAM_COMMISSIONS.find(p => p.programId === programId);
@@ -89,6 +94,13 @@ export default function AmbassadorCommissionsScreen() {
     setHasChanges(true);
   }, []);
 
+  const handleNetworkRateChange = useCallback((value: string) => {
+    const numValue = parseInt(value.replace(/[^0-9]/g, ''), 10) || 0;
+    const clampedValue = Math.min(Math.max(numValue, 0), 100);
+    setNetworkCommissionRate(clampedValue);
+    setHasChanges(true);
+  }, []);
+
   const handleSave = useCallback(() => {
     Alert.alert(
       'Değişiklikleri Kaydet',
@@ -98,14 +110,18 @@ export default function AmbassadorCommissionsScreen() {
         {
           text: 'Kaydet',
           onPress: () => {
-            console.log('Saving ambassador commissions:', { ambassadorId: id, commissions });
+            console.log('Saving ambassador commissions:', { 
+              ambassadorId: id, 
+              commissions,
+              networkCommissionRate 
+            });
             setHasChanges(false);
             Alert.alert('Başarılı', 'Komisyon ayarları kaydedildi.');
           },
         },
       ]
     );
-  }, [ambassador, id, commissions]);
+  }, [ambassador, id, commissions, networkCommissionRate]);
 
   if (!ambassador) {
     return (
@@ -249,6 +265,36 @@ export default function AmbassadorCommissionsScreen() {
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
       >
+        <View style={styles.networkCommissionSection}>
+          <View style={styles.networkCommissionHeader}>
+            <View style={styles.networkCommissionIconWrapper}>
+              <Users size={20} color={Colors.secondary} />
+            </View>
+            <View style={styles.networkCommissionHeaderText}>
+              <Text style={styles.networkCommissionTitle}>Ağ Komisyon Oranı</Text>
+              <Text style={styles.networkCommissionDesc}>
+                Bu elçinin alt elçilerinden kazanacağı komisyon yüzdesi
+              </Text>
+            </View>
+          </View>
+          <View style={styles.networkCommissionInputRow}>
+            <View style={styles.networkCommissionInputWrapper}>
+              <Percent size={16} color={Colors.textSecondary} />
+              <TextInput
+                style={styles.networkCommissionInput}
+                value={networkCommissionRate.toString()}
+                onChangeText={handleNetworkRateChange}
+                keyboardType="numeric"
+                maxLength={3}
+                testID="network-commission-rate-input"
+              />
+            </View>
+            <Text style={styles.networkCommissionNote}>
+              Alt elçilerin toplam kazançlarının %{networkCommissionRate} oranı bu elçiye aktarılır
+            </Text>
+          </View>
+        </View>
+
         <Text style={styles.sectionDescription}>
           Bu elçi için program bazlı özel komisyon oranları belirleyebilirsiniz.
           Özel oran belirlenmediğinde varsayılan sistem oranları uygulanır.
@@ -383,6 +429,70 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     lineHeight: 20,
     marginBottom: 20,
+  },
+  networkCommissionSection: {
+    backgroundColor: Colors.secondary + '15',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: Colors.secondary + '30',
+  },
+  networkCommissionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  networkCommissionIconWrapper: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: Colors.secondary + '30',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  networkCommissionHeaderText: {
+    flex: 1,
+  },
+  networkCommissionTitle: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: Colors.text,
+    marginBottom: 4,
+  },
+  networkCommissionDesc: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+  },
+  networkCommissionInputRow: {
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    padding: 14,
+  },
+  networkCommissionInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.surfaceLight,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    height: 48,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  networkCommissionInput: {
+    flex: 1,
+    fontSize: 20,
+    fontWeight: '700' as const,
+    color: Colors.secondary,
+    marginLeft: 8,
+    padding: 0,
+  },
+  networkCommissionNote: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    textAlign: 'center' as const,
   },
   programCard: {
     backgroundColor: Colors.surface,

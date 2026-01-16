@@ -100,6 +100,7 @@ export interface Ambassador {
   privacyPolicyConsentDate?: string;
   termsConsent: boolean;
   termsConsentDate?: string;
+  networkCommissionRate: number;
 }
 
 export interface Earnings {

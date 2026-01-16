@@ -284,6 +284,7 @@ export const MOCK_CURRENT_AMBASSADOR: Ambassador = {
   privacyPolicyConsentDate: '2023-06-15',
   termsConsent: true,
   termsConsentDate: '2023-06-15',
+  networkCommissionRate: 10,
 };
 
 export const MOCK_SUB_AMBASSADORS: Ambassador[] = [
@@ -317,6 +318,7 @@ export const MOCK_SUB_AMBASSADORS: Ambassador[] = [
     privacyPolicyConsentDate: '2023-09-20',
     termsConsent: true,
     termsConsentDate: '2023-09-20',
+    networkCommissionRate: 10,
   },
   {
     id: 'sub2',
@@ -348,6 +350,7 @@ export const MOCK_SUB_AMBASSADORS: Ambassador[] = [
     privacyPolicyConsentDate: '2023-11-05',
     termsConsent: true,
     termsConsentDate: '2023-11-05',
+    networkCommissionRate: 10,
   },
   {
     id: 'sub3',
@@ -382,6 +385,7 @@ export const MOCK_SUB_AMBASSADORS: Ambassador[] = [
     privacyPolicyConsentDate: '2023-10-12',
     termsConsent: true,
     termsConsentDate: '2023-10-12',
+    networkCommissionRate: 10,
   },
   {
     id: 'sub1-1',
@@ -413,6 +417,7 @@ export const MOCK_SUB_AMBASSADORS: Ambassador[] = [
     privacyPolicyConsentDate: '2024-01-08',
     termsConsent: true,
     termsConsentDate: '2024-01-08',
+    networkCommissionRate: 10,
   },
   {
     id: 'sub1-2',
@@ -445,6 +450,7 @@ export const MOCK_SUB_AMBASSADORS: Ambassador[] = [
     privacyPolicyConsentDate: '2024-01-12',
     termsConsent: true,
     termsConsentDate: '2024-01-12',
+    networkCommissionRate: 10,
   },
   {
     id: 'sub3-1',
@@ -476,6 +482,7 @@ export const MOCK_SUB_AMBASSADORS: Ambassador[] = [
     privacyPolicyConsentDate: '2023-12-20',
     termsConsent: true,
     termsConsentDate: '2023-12-20',
+    networkCommissionRate: 10,
   },
 ];
 

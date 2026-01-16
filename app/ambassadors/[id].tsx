@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
@@ -21,10 +21,12 @@ import {
   Phone,
   MessageCircle,
   ChevronRight,
+  Percent,
+  Lock,
 } from 'lucide-react-native';
 
 import Colors from '@/constants/colors';
-import { getAllAmbassadors } from '@/mocks/data';
+import { getAllAmbassadors, MOCK_CURRENT_AMBASSADOR, MOCK_CURRENT_USER } from '@/mocks/data';
 import { AMBASSADOR_TYPE_LABELS } from '@/types';
 
 export default function AmbassadorDetailScreen() {
@@ -34,6 +36,22 @@ export default function AmbassadorDetailScreen() {
 
   const allAmbassadors = getAllAmbassadors();
   const ambassador = allAmbassadors.find(a => a.id === id);
+  
+  const isAdmin = MOCK_CURRENT_USER.role === 'admin';
+  const currentAmbassador = MOCK_CURRENT_AMBASSADOR;
+  
+  const isDirectSubAmbassador = useMemo(() => {
+    if (!ambassador) return false;
+    return ambassador.parentId === currentAmbassador.id;
+  }, [ambassador, currentAmbassador.id]);
+  
+  const canSeeContactDetails = isAdmin || ambassador?.id === currentAmbassador.id;
+  
+  const networkCommission = useMemo(() => {
+    if (!ambassador || !isDirectSubAmbassador) return 0;
+    const rate = currentAmbassador.networkCommissionRate || 10;
+    return (ambassador.totalEarningsUSD * rate) / 100;
+  }, [ambassador, isDirectSubAmbassador, currentAmbassador.networkCommissionRate]);
 
   if (!ambassador) {
     return (
@@ -55,7 +73,7 @@ export default function AmbassadorDetailScreen() {
 
   const typeInfo = AMBASSADOR_TYPE_LABELS[ambassador.type];
   const subAmbassadors = allAmbassadors.filter(a => a.parentId === ambassador.id);
-
+  
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('tr-TR', {
@@ -122,37 +140,53 @@ export default function AmbassadorDetailScreen() {
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.infoCard}>
-          <View style={styles.infoRow}>
-            <Mail size={18} color={Colors.textSecondary} />
-            <Text style={styles.infoText}>{ambassador.email}</Text>
-          </View>
-          <View style={styles.infoDivider} />
-          <View style={styles.infoRow}>
-            <Phone size={18} color={Colors.textSecondary} />
-            <Text style={styles.infoText}>{ambassador.phone}</Text>
-          </View>
-          <View style={styles.infoDivider} />
-          <View style={styles.infoRow}>
-            <Calendar size={18} color={Colors.textSecondary} />
-            <Text style={styles.infoText}>Katılım: {formatDate(ambassador.joinedAt)}</Text>
-          </View>
-        </View>
+        {canSeeContactDetails ? (
+          <>
+            <View style={styles.infoCard}>
+              <View style={styles.infoRow}>
+                <Mail size={18} color={Colors.textSecondary} />
+                <Text style={styles.infoText}>{ambassador.email}</Text>
+              </View>
+              <View style={styles.infoDivider} />
+              <View style={styles.infoRow}>
+                <Phone size={18} color={Colors.textSecondary} />
+                <Text style={styles.infoText}>{ambassador.phone}</Text>
+              </View>
+              <View style={styles.infoDivider} />
+              <View style={styles.infoRow}>
+                <Calendar size={18} color={Colors.textSecondary} />
+                <Text style={styles.infoText}>Katılım: {formatDate(ambassador.joinedAt)}</Text>
+              </View>
+            </View>
 
-        <View style={styles.contactButtons}>
-          <TouchableOpacity style={styles.contactButton} onPress={handleEmail}>
-            <Mail size={20} color={Colors.info} />
-            <Text style={[styles.contactButtonText, { color: Colors.info }]}>E-posta</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.contactButton} onPress={handleCall}>
-            <Phone size={20} color={Colors.success} />
-            <Text style={[styles.contactButtonText, { color: Colors.success }]}>Ara</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.contactButton} onPress={handleWhatsApp}>
-            <MessageCircle size={20} color="#25D366" />
-            <Text style={[styles.contactButtonText, { color: '#25D366' }]}>WhatsApp</Text>
-          </TouchableOpacity>
-        </View>
+            <View style={styles.contactButtons}>
+              <TouchableOpacity style={styles.contactButton} onPress={handleEmail}>
+                <Mail size={20} color={Colors.info} />
+                <Text style={[styles.contactButtonText, { color: Colors.info }]}>E-posta</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.contactButton} onPress={handleCall}>
+                <Phone size={20} color={Colors.success} />
+                <Text style={[styles.contactButtonText, { color: Colors.success }]}>Ara</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.contactButton} onPress={handleWhatsApp}>
+                <MessageCircle size={20} color="#25D366" />
+                <Text style={[styles.contactButtonText, { color: '#25D366' }]}>WhatsApp</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        ) : (
+          <View style={styles.infoCard}>
+            <View style={styles.infoRow}>
+              <Lock size={18} color={Colors.textMuted} />
+              <Text style={styles.infoTextMuted}>İletişim bilgileri gizli</Text>
+            </View>
+            <View style={styles.infoDivider} />
+            <View style={styles.infoRow}>
+              <Calendar size={18} color={Colors.textSecondary} />
+              <Text style={styles.infoText}>Katılım: {formatDate(ambassador.joinedAt)}</Text>
+            </View>
+          </View>
+        )}
 
         <Text style={styles.sectionTitle}>İstatistikler</Text>
         <View style={styles.statsGrid}>
@@ -169,7 +203,7 @@ export default function AmbassadorDetailScreen() {
               <DollarSign size={20} color={Colors.background} />
             </View>
             <Text style={styles.statValue}>{formatCurrency(ambassador.totalEarningsUSD, 'USD')}</Text>
-            <Text style={styles.statLabel}>Kazanç</Text>
+            <Text style={styles.statLabel}>Toplam Kazanç</Text>
           </View>
 
           <View style={[styles.statCard, { backgroundColor: Colors.primary + '15' }]}>
@@ -180,6 +214,39 @@ export default function AmbassadorDetailScreen() {
             <Text style={styles.statLabel}>Puan</Text>
           </View>
         </View>
+
+        {isDirectSubAmbassador && (
+          <View style={styles.networkCommissionCard}>
+            <View style={styles.networkCommissionHeader}>
+              <View style={styles.networkCommissionIcon}>
+                <Percent size={20} color={Colors.secondary} />
+              </View>
+              <View style={styles.networkCommissionInfo}>
+                <Text style={styles.networkCommissionTitle}>Sizin Ağ Komisyonunuz</Text>
+                <Text style={styles.networkCommissionDesc}>
+                  Bu elçinin kazançlarından %{currentAmbassador.networkCommissionRate || 10} pay
+                </Text>
+              </View>
+            </View>
+            <View style={styles.networkCommissionAmount}>
+              <Text style={styles.networkCommissionValue}>
+                {formatCurrency(networkCommission, 'USD')}
+              </Text>
+              <Text style={styles.networkCommissionNote}>
+                Toplam: {formatCurrency(ambassador.totalEarningsUSD, 'USD')} × %{currentAmbassador.networkCommissionRate || 10}
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {!canSeeContactDetails && (
+          <View style={styles.privacyNote}>
+            <Lock size={14} color={Colors.textMuted} />
+            <Text style={styles.privacyNoteText}>
+              Program bazlı kazanç detayları gizlidir. Sadece toplam kazanç görüntülenebilir.
+            </Text>
+          </View>
+        )}
 
         {subAmbassadors.length > 0 && (
           <>
@@ -201,7 +268,7 @@ export default function AmbassadorDetailScreen() {
                     <View style={styles.subInfo}>
                       <Text style={styles.subName}>{sub.name}</Text>
                       <Text style={styles.subMeta}>
-                        {sub.studentsReferred} öğrenci • {formatCurrency(sub.totalEarningsUSD, 'USD')}
+                        {sub.studentsReferred} öğrenci • Toplam: {formatCurrency(sub.totalEarningsUSD, 'USD')}
                       </Text>
                     </View>
                     <View style={[styles.subTypeBadge, { backgroundColor: subTypeInfo.color + '20' }]}>
@@ -322,6 +389,12 @@ const styles = StyleSheet.create({
     color: Colors.text,
     flex: 1,
   },
+  infoTextMuted: {
+    fontSize: 14,
+    color: Colors.textMuted,
+    flex: 1,
+    fontStyle: 'italic' as const,
+  },
   infoDivider: {
     height: 1,
     backgroundColor: Colors.border,
@@ -431,6 +504,71 @@ const styles = StyleSheet.create({
   subTypeBadgeText: {
     fontSize: 11,
     fontWeight: '600',
+  },
+  networkCommissionCard: {
+    backgroundColor: Colors.secondary + '15',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: Colors.secondary + '30',
+  },
+  networkCommissionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  networkCommissionIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: Colors.secondary + '30',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  networkCommissionInfo: {
+    flex: 1,
+  },
+  networkCommissionTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.text,
+    marginBottom: 2,
+  },
+  networkCommissionDesc: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+  },
+  networkCommissionAmount: {
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    padding: 14,
+    alignItems: 'center',
+  },
+  networkCommissionValue: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: Colors.secondary,
+    marginBottom: 4,
+  },
+  networkCommissionNote: {
+    fontSize: 12,
+    color: Colors.textMuted,
+  },
+  privacyNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.surfaceLight,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 24,
+    gap: 8,
+  },
+  privacyNoteText: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    flex: 1,
   },
   errorContainer: {
     flex: 1,
