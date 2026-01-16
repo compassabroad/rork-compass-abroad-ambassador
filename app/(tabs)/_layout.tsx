@@ -1,5 +1,5 @@
 import { Tabs } from "expo-router";
-import { LayoutDashboard, Users, Network, Wallet, MessageCircle, Shield, UsersRound } from "lucide-react-native";
+import { LayoutDashboard, Users, Network, Wallet, MessageCircle, Shield, UsersRound, UserCircle } from "lucide-react-native";
 import React from "react";
 import { Platform } from "react-native";
 
@@ -79,13 +79,15 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="programs"
+        name="profile"
         options={{
-          href: null,
+          title: "Elçi Profili",
+          tabBarIcon: ({ color, size }) => <UserCircle color={color} size={size} />,
+          href: isAdmin ? null : undefined,
         }}
       />
       <Tabs.Screen
-        name="profile"
+        name="programs"
         options={{
           href: null,
         }}
