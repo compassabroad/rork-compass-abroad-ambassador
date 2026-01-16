@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -11,10 +11,11 @@ import {
   Platform,
   Alert,
 } from 'react-native';
-import { X, DollarSign, CreditCard, Building2, AlertCircle, CheckCircle } from 'lucide-react-native';
+import { X, DollarSign, CreditCard, Building2, AlertCircle, CheckCircle, ChevronDown, User, Plus, Save } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useExchangeRate } from '@/contexts/ExchangeRateContext';
 import { MOCK_EARNINGS, MOCK_CURRENT_AMBASSADOR } from '@/mocks/data';
+import { SavedIban } from '@/types';
 
 interface PaymentRequestModalProps {
   visible: boolean;
@@ -27,6 +28,7 @@ export interface WithdrawalRequest {
   currency: 'USD' | 'TRY';
   iban: string;
   bankName: string;
+  accountHolder: string;
 }
 
 const BANKS = [
@@ -49,22 +51,93 @@ export default function PaymentRequestModal({ visible, onClose, onSubmit }: Paym
   const [currency, setCurrency] = useState<'USD' | 'TRY'>('USD');
   const [bankName, setBankName] = useState('');
   const [showBankPicker, setShowBankPicker] = useState(false);
+  const [selectedIbanId, setSelectedIbanId] = useState<string | 'new'>('');
+  const [showIbanPicker, setShowIbanPicker] = useState(false);
+  const [newIban, setNewIban] = useState('');
+  const [ibanError, setIbanError] = useState('');
+  const [showSaveIbanPrompt, setShowSaveIbanPrompt] = useState(false);
   
   const { rate: exchangeRate, formattedRate } = useExchangeRate();
 
   const availableUSD = MOCK_EARNINGS.pendingUSD;
   const availableTRY = availableUSD * exchangeRate;
-  const iban = MOCK_CURRENT_AMBASSADOR.iban || '';
+  const savedIbans = useMemo(() => MOCK_CURRENT_AMBASSADOR.savedIbans || [], []);
+  const accountHolderName = MOCK_CURRENT_AMBASSADOR.name;
+
+  const selectedSavedIban = useMemo(() => {
+    if (selectedIbanId && selectedIbanId !== 'new') {
+      return savedIbans.find(i => i.id === selectedIbanId);
+    }
+    return null;
+  }, [selectedIbanId, savedIbans]);
 
   const resetForm = () => {
     setAmount('');
     setCurrency('USD');
     setBankName('');
     setShowBankPicker(false);
+    setSelectedIbanId('');
+    setShowIbanPicker(false);
+    setNewIban('');
+    setIbanError('');
+    setShowSaveIbanPrompt(false);
   };
 
-  const formatIBAN = (iban: string) => {
-    return iban.replace(/(.{4})/g, '$1 ').trim();
+  const formatIbanDisplay = (iban: string) => {
+    const cleaned = iban.replace(/\s/g, '');
+    return cleaned.replace(/(.{4})/g, '$1 ').trim();
+  };
+
+  const formatIbanInput = (text: string) => {
+    let cleaned = text.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    
+    if (cleaned.length > 0 && !cleaned.startsWith('TR')) {
+      if (cleaned.startsWith('T')) {
+        cleaned = 'T' + cleaned.slice(1);
+      } else {
+        cleaned = 'TR' + cleaned;
+      }
+    }
+    
+    if (cleaned.length > 26) {
+      cleaned = cleaned.slice(0, 26);
+    }
+    
+    return cleaned;
+  };
+
+  const validateIban = (iban: string): boolean => {
+    const cleaned = iban.replace(/\s/g, '');
+    
+    if (cleaned.length !== 26) {
+      setIbanError('IBAN 26 karakter olmalıdır');
+      return false;
+    }
+    
+    if (!cleaned.startsWith('TR')) {
+      setIbanError('IBAN "TR" ile başlamalıdır');
+      return false;
+    }
+    
+    const afterTR = cleaned.slice(2);
+    if (!/^\d+$/.test(afterTR)) {
+      setIbanError('TR sonrası sadece rakam olmalıdır');
+      return false;
+    }
+    
+    setIbanError('');
+    return true;
+  };
+
+  const handleIbanChange = (text: string) => {
+    const formatted = formatIbanInput(text);
+    setNewIban(formatted);
+    
+    if (formatted.length === 26) {
+      validateIban(formatted);
+    } else {
+      setIbanError('');
+    }
   };
 
   const getAvailableBalance = () => {
@@ -81,6 +154,23 @@ export default function PaymentRequestModal({ visible, onClose, onSubmit }: Paym
   const handleAmountChange = (text: string) => {
     const cleaned = text.replace(/[^0-9.]/g, '');
     setAmount(cleaned);
+  };
+
+  const getCurrentIban = (): string => {
+    if (selectedSavedIban) {
+      return selectedSavedIban.iban;
+    }
+    if (selectedIbanId === 'new') {
+      return newIban;
+    }
+    return '';
+  };
+
+  const getCurrentBankName = (): string => {
+    if (selectedSavedIban) {
+      return selectedSavedIban.bankName;
+    }
+    return bankName;
   };
 
   const handleSubmit = () => {
@@ -101,21 +191,61 @@ export default function PaymentRequestModal({ visible, onClose, onSubmit }: Paym
       return;
     }
 
-    if (!iban) {
-      Alert.alert('Hata', 'IBAN bilginiz eksik. Lütfen profil sayfasından ekleyin.');
+    if (!accountHolderName) {
+      Alert.alert('Hata', 'Hesap sahibi bilgisi eksik. Lütfen profil sayfasından güncelleyin.');
       return;
     }
 
-    if (!bankName) {
+    const currentIban = getCurrentIban();
+    if (!currentIban) {
+      Alert.alert('Hata', 'Lütfen bir IBAN seçin veya yeni IBAN girin');
+      return;
+    }
+
+    if (selectedIbanId === 'new' && !validateIban(newIban)) {
+      return;
+    }
+
+    const currentBankName = getCurrentBankName();
+    if (!currentBankName) {
       Alert.alert('Hata', 'Lütfen banka seçin');
+      return;
+    }
+
+    if (selectedIbanId === 'new' && !showSaveIbanPrompt) {
+      setShowSaveIbanPrompt(true);
       return;
     }
 
     onSubmit({
       amount: numAmount,
       currency,
-      iban,
+      iban: currentIban,
+      bankName: currentBankName,
+      accountHolder: accountHolderName,
+    });
+
+    resetForm();
+    onClose();
+    Alert.alert(
+      'Talep Gönderildi',
+      `${formatCurrency(numAmount, currency)} çekim talebiniz alındı. 3-5 iş günü içinde hesabınıza aktarılacaktır.`
+    );
+  };
+
+  const handleSaveIbanChoice = (save: boolean) => {
+    setShowSaveIbanPrompt(false);
+    if (save) {
+      console.log('Saving new IBAN:', newIban, bankName);
+    }
+    
+    const numAmount = parseFloat(amount);
+    onSubmit({
+      amount: numAmount,
+      currency,
+      iban: newIban,
       bankName,
+      accountHolder: accountHolderName,
     });
 
     resetForm();
@@ -129,6 +259,20 @@ export default function PaymentRequestModal({ visible, onClose, onSubmit }: Paym
   const handleClose = () => {
     resetForm();
     onClose();
+  };
+
+  const handleSelectSavedIban = (iban: SavedIban) => {
+    setSelectedIbanId(iban.id);
+    setBankName(iban.bankName);
+    setShowIbanPicker(false);
+    setNewIban('');
+    setIbanError('');
+  };
+
+  const handleSelectNewIban = () => {
+    setSelectedIbanId('new');
+    setShowIbanPicker(false);
+    setBankName('');
   };
 
   return (
@@ -209,54 +353,136 @@ export default function PaymentRequestModal({ visible, onClose, onSubmit }: Paym
 
           <View style={styles.inputGroup}>
             <View style={styles.labelRow}>
-              <CreditCard size={18} color={Colors.secondary} />
-              <Text style={styles.sectionLabel}>IBAN</Text>
+              <User size={18} color={Colors.secondary} />
+              <Text style={styles.sectionLabel}>Ad Soyad</Text>
             </View>
-            {iban ? (
-              <View style={styles.ibanDisplay}>
-                <Text style={styles.ibanText}>{formatIBAN(iban)}</Text>
-                <CheckCircle size={18} color={Colors.success} />
-              </View>
-            ) : (
-              <View style={styles.ibanWarning}>
-                <AlertCircle size={18} color={Colors.warning} />
-                <Text style={styles.ibanWarningText}>IBAN bilginiz eksik. Profil sayfasından ekleyin.</Text>
-              </View>
-            )}
+            <View style={styles.nameDisplay}>
+              <Text style={styles.nameText}>{accountHolderName}</Text>
+            </View>
+            <Text style={styles.nameHint}>İsim değişikliği için Profil sayfasından talep oluşturun</Text>
           </View>
 
           <View style={styles.inputGroup}>
             <View style={styles.labelRow}>
-              <Building2 size={18} color={Colors.secondary} />
-              <Text style={styles.sectionLabel}>Banka</Text>
+              <CreditCard size={18} color={Colors.secondary} />
+              <Text style={styles.sectionLabel}>IBAN</Text>
             </View>
+            
             <TouchableOpacity 
-              style={styles.bankSelector} 
-              onPress={() => setShowBankPicker(!showBankPicker)}
+              style={styles.ibanSelector} 
+              onPress={() => setShowIbanPicker(!showIbanPicker)}
             >
-              <Text style={bankName ? styles.bankText : styles.bankPlaceholder}>
-                {bankName || 'Banka seçin'}
+              <Text style={selectedIbanId ? styles.ibanSelectorText : styles.ibanSelectorPlaceholder}>
+                {selectedSavedIban 
+                  ? `${selectedSavedIban.bankName} - ${formatIbanDisplay(selectedSavedIban.iban)}`
+                  : selectedIbanId === 'new'
+                    ? 'Yeni IBAN Girişi'
+                    : 'IBAN Seçin'}
               </Text>
+              <ChevronDown size={20} color={Colors.textSecondary} />
             </TouchableOpacity>
-            {showBankPicker && (
-              <View style={styles.bankOptions}>
-                {BANKS.map((bank) => (
-                  <TouchableOpacity
-                    key={bank}
-                    style={[styles.bankOption, bankName === bank && styles.bankOptionSelected]}
-                    onPress={() => {
-                      setBankName(bank);
-                      setShowBankPicker(false);
-                    }}
-                  >
-                    <Text style={[styles.bankOptionText, bankName === bank && styles.bankOptionTextSelected]}>
-                      {bank}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+
+            {showIbanPicker && (
+              <View style={styles.ibanOptions}>
+                {savedIbans.length > 0 && (
+                  <>
+                    <Text style={styles.ibanOptionsTitle}>Kayıtlı IBAN&apos;lar</Text>
+                    {savedIbans.map((iban) => (
+                      <TouchableOpacity
+                        key={iban.id}
+                        style={[styles.ibanOption, selectedIbanId === iban.id && styles.ibanOptionSelected]}
+                        onPress={() => handleSelectSavedIban(iban)}
+                      >
+                        <View style={styles.ibanOptionContent}>
+                          <Text style={[styles.ibanOptionBank, selectedIbanId === iban.id && styles.ibanOptionTextSelected]}>
+                            {iban.bankName}
+                          </Text>
+                          <Text style={[styles.ibanOptionNumber, selectedIbanId === iban.id && styles.ibanOptionTextSelected]}>
+                            {formatIbanDisplay(iban.iban)}
+                          </Text>
+                        </View>
+                        {iban.isDefault && (
+                          <View style={styles.defaultBadge}>
+                            <Text style={styles.defaultBadgeText}>Varsayılan</Text>
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                    ))}
+                  </>
+                )}
+                <TouchableOpacity
+                  style={[styles.ibanOption, styles.newIbanOption, selectedIbanId === 'new' && styles.ibanOptionSelected]}
+                  onPress={handleSelectNewIban}
+                >
+                  <Plus size={18} color={selectedIbanId === 'new' ? Colors.secondary : Colors.textSecondary} />
+                  <Text style={[styles.newIbanText, selectedIbanId === 'new' && styles.ibanOptionTextSelected]}>
+                    Yeni IBAN Gir
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {selectedIbanId === 'new' && (
+              <View style={styles.newIbanInput}>
+                <TextInput
+                  style={[styles.ibanTextInput, ibanError ? styles.ibanTextInputError : null]}
+                  value={formatIbanDisplay(newIban)}
+                  onChangeText={handleIbanChange}
+                  placeholder="TR00 0000 0000 0000 0000 0000 00"
+                  placeholderTextColor={Colors.textMuted}
+                  autoCapitalize="characters"
+                  maxLength={32}
+                />
+                {ibanError ? (
+                  <View style={styles.ibanErrorContainer}>
+                    <AlertCircle size={14} color={Colors.error} />
+                    <Text style={styles.ibanErrorText}>{ibanError}</Text>
+                  </View>
+                ) : newIban.length === 26 ? (
+                  <View style={styles.ibanSuccessContainer}>
+                    <CheckCircle size={14} color={Colors.success} />
+                    <Text style={styles.ibanSuccessText}>IBAN formatı geçerli</Text>
+                  </View>
+                ) : null}
               </View>
             )}
           </View>
+
+          {(selectedIbanId === 'new' || !selectedSavedIban) && (
+            <View style={styles.inputGroup}>
+              <View style={styles.labelRow}>
+                <Building2 size={18} color={Colors.secondary} />
+                <Text style={styles.sectionLabel}>Banka</Text>
+              </View>
+              <TouchableOpacity 
+                style={styles.bankSelector} 
+                onPress={() => setShowBankPicker(!showBankPicker)}
+              >
+                <Text style={bankName ? styles.bankText : styles.bankPlaceholder}>
+                  {bankName || 'Banka seçin'}
+                </Text>
+                <ChevronDown size={20} color={Colors.textSecondary} />
+              </TouchableOpacity>
+              {showBankPicker && (
+                <ScrollView style={styles.bankOptions} nestedScrollEnabled>
+                  {BANKS.map((bank) => (
+                    <TouchableOpacity
+                      key={bank}
+                      style={[styles.bankOption, bankName === bank && styles.bankOptionSelected]}
+                      onPress={() => {
+                        setBankName(bank);
+                        setShowBankPicker(false);
+                      }}
+                    >
+                      <Text style={[styles.bankOptionText, bankName === bank && styles.bankOptionTextSelected]}>
+                        {bank}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              )}
+            </View>
+          )}
 
           <View style={styles.infoCard}>
             <AlertCircle size={18} color={Colors.info} />
@@ -276,6 +502,32 @@ export default function PaymentRequestModal({ visible, onClose, onSubmit }: Paym
             <Text style={styles.submitButtonText}>Talep Gönder</Text>
           </TouchableOpacity>
         </View>
+
+        <Modal visible={showSaveIbanPrompt} transparent animationType="fade">
+          <View style={styles.saveIbanOverlay}>
+            <View style={styles.saveIbanModal}>
+              <Save size={32} color={Colors.secondary} />
+              <Text style={styles.saveIbanTitle}>IBAN&apos;ı Kaydet</Text>
+              <Text style={styles.saveIbanMessage}>
+                Bu IBAN&apos;ı gelecekte kullanmak üzere kaydetmek ister misiniz?
+              </Text>
+              <View style={styles.saveIbanButtons}>
+                <TouchableOpacity 
+                  style={styles.saveIbanButtonNo} 
+                  onPress={() => handleSaveIbanChoice(false)}
+                >
+                  <Text style={styles.saveIbanButtonNoText}>Hayır</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={styles.saveIbanButtonYes} 
+                  onPress={() => handleSaveIbanChoice(true)}
+                >
+                  <Text style={styles.saveIbanButtonYesText}>Evet, Kaydet</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -297,7 +549,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 20,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     color: Colors.text,
   },
   closeButton: {
@@ -341,7 +593,7 @@ const styles = StyleSheet.create({
   },
   balanceValue: {
     fontSize: 22,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     color: Colors.secondary,
   },
   balanceDivider: {
@@ -355,7 +607,7 @@ const styles = StyleSheet.create({
   },
   sectionLabel: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: Colors.text,
     marginBottom: 12,
   },
@@ -381,7 +633,7 @@ const styles = StyleSheet.create({
   },
   currencyButtonText: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: Colors.textSecondary,
   },
   currencyButtonTextActive: {
@@ -389,7 +641,7 @@ const styles = StyleSheet.create({
   },
   currencySymbol: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: Colors.textSecondary,
   },
   currencySymbolActive: {
@@ -415,14 +667,14 @@ const styles = StyleSheet.create({
   },
   amountPrefix: {
     fontSize: 24,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: Colors.secondary,
     marginRight: 8,
   },
   amountInput: {
     flex: 1,
     fontSize: 24,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: Colors.text,
     paddingVertical: 16,
   },
@@ -436,7 +688,26 @@ const styles = StyleSheet.create({
     color: Colors.secondary,
     fontWeight: '600' as const,
   },
-  ibanDisplay: {
+  nameDisplay: {
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    opacity: 0.7,
+  },
+  nameText: {
+    fontSize: 16,
+    color: Colors.text,
+    fontWeight: '500' as const,
+  },
+  nameHint: {
+    fontSize: 11,
+    color: Colors.textMuted,
+    marginTop: 6,
+    fontStyle: 'italic',
+  },
+  ibanSelector: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -446,28 +717,122 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  ibanText: {
+  ibanSelectorText: {
+    fontSize: 14,
+    color: Colors.text,
+    flex: 1,
+  },
+  ibanSelectorPlaceholder: {
+    fontSize: 14,
+    color: Colors.textMuted,
+    flex: 1,
+  },
+  ibanOptions: {
+    backgroundColor: Colors.surfaceElevated,
+    borderRadius: 12,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    overflow: 'hidden',
+  },
+  ibanOptionsTitle: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: Colors.textSecondary,
+    padding: 12,
+    paddingBottom: 8,
+    backgroundColor: Colors.surface,
+  },
+  ibanOption: {
+    padding: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  ibanOptionSelected: {
+    backgroundColor: Colors.primary + '30',
+  },
+  ibanOptionContent: {
+    flex: 1,
+  },
+  ibanOptionBank: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: Colors.text,
+    marginBottom: 4,
+  },
+  ibanOptionNumber: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
+  ibanOptionTextSelected: {
+    color: Colors.secondary,
+  },
+  defaultBadge: {
+    backgroundColor: Colors.secondary + '30',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  defaultBadgeText: {
+    fontSize: 10,
+    fontWeight: '600' as const,
+    color: Colors.secondary,
+  },
+  newIbanOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  newIbanText: {
+    fontSize: 14,
+    fontWeight: '500' as const,
+    color: Colors.textSecondary,
+  },
+  newIbanInput: {
+    marginTop: 12,
+  },
+  ibanTextInput: {
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: Colors.border,
     fontSize: 14,
     color: Colors.text,
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
     letterSpacing: 1,
   },
-  ibanWarning: {
+  ibanTextInputError: {
+    borderColor: Colors.error,
+  },
+  ibanErrorContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    backgroundColor: Colors.warning + '20',
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: Colors.warning + '50',
+    gap: 6,
+    marginTop: 8,
   },
-  ibanWarningText: {
-    flex: 1,
-    fontSize: 13,
-    color: Colors.warning,
+  ibanErrorText: {
+    fontSize: 12,
+    color: Colors.error,
+  },
+  ibanSuccessContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+  },
+  ibanSuccessText: {
+    fontSize: 12,
+    color: Colors.success,
   },
   bankSelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     backgroundColor: Colors.surface,
     borderRadius: 12,
     padding: 16,
@@ -504,7 +869,7 @@ const styles = StyleSheet.create({
   },
   bankOptionTextSelected: {
     color: Colors.secondary,
-    fontWeight: '600',
+    fontWeight: '600' as const,
   },
   infoCard: {
     flexDirection: 'row',
@@ -540,7 +905,7 @@ const styles = StyleSheet.create({
   },
   cancelButtonText: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: Colors.textSecondary,
   },
   submitButton: {
@@ -552,7 +917,65 @@ const styles = StyleSheet.create({
   },
   submitButtonText: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '700' as const,
+    color: Colors.primaryDark,
+  },
+  saveIbanOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  saveIbanModal: {
+    backgroundColor: Colors.background,
+    borderRadius: 20,
+    padding: 24,
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: 320,
+  },
+  saveIbanTitle: {
+    fontSize: 18,
+    fontWeight: '700' as const,
+    color: Colors.text,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  saveIbanMessage: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  saveIbanButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  saveIbanButtonNo: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor: Colors.surface,
+    alignItems: 'center',
+  },
+  saveIbanButtonNoText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: Colors.textSecondary,
+  },
+  saveIbanButtonYes: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor: Colors.secondary,
+    alignItems: 'center',
+  },
+  saveIbanButtonYesText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
     color: Colors.primaryDark,
   },
 });

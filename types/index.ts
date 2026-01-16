@@ -66,6 +66,7 @@ export interface Ambassador {
   studentsReferred: number;
   subAmbassadors: string[];
   iban?: string;
+  savedIbans?: SavedIban[];
   kvkkConsent: boolean;
   kvkkConsentDate?: string;
 }
@@ -249,4 +250,11 @@ export interface SocialMediaLinks {
   linkedin: string;
   twitter: string;
   facebook: string;
+}
+
+export interface SavedIban {
+  id: string;
+  iban: string;
+  bankName: string;
+  isDefault: boolean;
 }

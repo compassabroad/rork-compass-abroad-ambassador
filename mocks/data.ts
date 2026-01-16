@@ -261,7 +261,11 @@ export const MOCK_CURRENT_AMBASSADOR: Ambassador = {
   compassPoints: 4820,
   studentsReferred: 28,
   subAmbassadors: ['sub1', 'sub2', 'sub3'],
-  iban: 'TR12 0001 0012 3456 7890 1234 56',
+  iban: 'TR120001001234567890123456',
+  savedIbans: [
+    { id: '1', iban: 'TR120001001234567890123456', bankName: 'Ziraat Bankası', isDefault: true },
+    { id: '2', iban: 'TR980006401234567890123456', bankName: 'İş Bankası', isDefault: false },
+  ],
   kvkkConsent: true,
   kvkkConsentDate: '2023-06-15',
 };
