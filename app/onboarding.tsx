@@ -26,7 +26,6 @@ import {
   ChevronLeft,
   Check,
   Shield,
-  FileText,
   MapPin,
   Calendar,
   Phone,
@@ -524,86 +523,94 @@ export default function OnboardingScreen() {
     </ScrollView>
   );
 
-  const renderStep5 = () => (
-    <View style={styles.stepContent}>
-      <Text style={styles.stepTitle}>Sözleşmeler</Text>
-      <Text style={styles.stepDescription}>
-        Devam etmek için aşağıdaki sözleşmeleri onaylamanız gerekmektedir
-      </Text>
+  const renderStep5 = () => {
+    const allConsentsGiven = data.privacyConsent && data.kvkkConsent && data.termsConsent;
+    const showWarning = !allConsentsGiven;
 
-      <View style={styles.agreementsList}>
-        <TouchableOpacity
-          style={styles.agreementItem}
-          onPress={() => setData({ ...data, kvkkConsent: !data.kvkkConsent })}
-        >
-          <View style={[styles.checkbox, data.kvkkConsent && styles.checkboxChecked]}>
-            {data.kvkkConsent && <Check size={16} color={Colors.background} />}
-          </View>
-          <View style={styles.agreementContent}>
-            <Text style={styles.agreementLabel}>KVKK Aydınlatma Metni</Text>
-            <Text style={styles.agreementDescription}>
-              Kişisel verilerinizin işlenmesine ilişkin aydınlatma metni
-            </Text>
-          </View>
-          <TouchableOpacity
-            style={styles.agreementLink}
-            onPress={() => Linking.openURL('https://compassabroad.com/kvkk')}
-          >
-            <FileText size={18} color={Colors.secondary} />
-          </TouchableOpacity>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.agreementItem}
-          onPress={() => setData({ ...data, privacyConsent: !data.privacyConsent })}
-        >
-          <View style={[styles.checkbox, data.privacyConsent && styles.checkboxChecked]}>
-            {data.privacyConsent && <Check size={16} color={Colors.background} />}
-          </View>
-          <View style={styles.agreementContent}>
-            <Text style={styles.agreementLabel}>Gizlilik Politikası</Text>
-            <Text style={styles.agreementDescription}>
-              Verilerinizin nasıl korunduğuna dair bilgiler
-            </Text>
-          </View>
-          <TouchableOpacity
-            style={styles.agreementLink}
-            onPress={() => Linking.openURL('https://compassabroad.com/privacy')}
-          >
-            <FileText size={18} color={Colors.secondary} />
-          </TouchableOpacity>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.agreementItem}
-          onPress={() => setData({ ...data, termsConsent: !data.termsConsent })}
-        >
-          <View style={[styles.checkbox, data.termsConsent && styles.checkboxChecked]}>
-            {data.termsConsent && <Check size={16} color={Colors.background} />}
-          </View>
-          <View style={styles.agreementContent}>
-            <Text style={styles.agreementLabel}>Kullanım Şartları</Text>
-            <Text style={styles.agreementDescription}>
-              Platform kullanım koşulları ve kurallar
-            </Text>
-          </View>
-          <TouchableOpacity
-            style={styles.agreementLink}
-            onPress={() => Linking.openURL('https://compassabroad.com/terms')}
-          >
-            <FileText size={18} color={Colors.secondary} />
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.infoBox}>
-        <Shield size={20} color={Colors.info} />
-        <Text style={styles.infoText}>
-          Bilgileriniz KVKK kapsamında güvenle saklanmaktadır ve üçüncü taraflarla paylaşılmamaktadır.
+    return (
+      <View style={styles.stepContent}>
+        <Text style={styles.stepTitle}>Sözleşmeler</Text>
+        <Text style={styles.stepDescription}>
+          Devam etmek için aşağıdaki sözleşmeleri onaylamanız gerekmektedir
         </Text>
+
+        <View style={styles.agreementsList}>
+          <View style={[styles.agreementItem, !data.privacyConsent && styles.agreementItemUnchecked]}>
+            <TouchableOpacity
+              style={styles.checkboxTouchable}
+              onPress={() => setData({ ...data, privacyConsent: !data.privacyConsent })}
+            >
+              <View style={[styles.checkbox, data.privacyConsent && styles.checkboxChecked]}>
+                {data.privacyConsent && <Check size={16} color={Colors.background} />}
+              </View>
+            </TouchableOpacity>
+            <View style={styles.agreementContent}>
+              <Text style={styles.agreementTextWrapper}>
+                <TouchableOpacity onPress={() => Linking.openURL('https://www.compassabroad.com.tr/gizlilik-politikasi/')}>
+                  <Text style={styles.agreementLink}>Gizlilik Politikası</Text>
+                </TouchableOpacity>
+              </Text>
+              <Text style={styles.agreementLabel}>{"'nı okudum ve kabul ediyorum"}</Text>
+            </View>
+          </View>
+
+          <View style={[styles.agreementItem, !data.kvkkConsent && styles.agreementItemUnchecked]}>
+            <TouchableOpacity
+              style={styles.checkboxTouchable}
+              onPress={() => setData({ ...data, kvkkConsent: !data.kvkkConsent })}
+            >
+              <View style={[styles.checkbox, data.kvkkConsent && styles.checkboxChecked]}>
+                {data.kvkkConsent && <Check size={16} color={Colors.background} />}
+              </View>
+            </TouchableOpacity>
+            <View style={styles.agreementContent}>
+              <Text style={styles.agreementTextWrapper}>
+                <TouchableOpacity onPress={() => Linking.openURL('https://www.compassabroad.com.tr/kvkk-aydinlatma-metni/')}>
+                  <Text style={styles.agreementLink}>KVKK Aydınlatma Metni</Text>
+                </TouchableOpacity>
+              </Text>
+              <Text style={styles.agreementLabel}>{"'ni okudum ve kabul ediyorum"}</Text>
+            </View>
+          </View>
+
+          <View style={[styles.agreementItem, !data.termsConsent && styles.agreementItemUnchecked]}>
+            <TouchableOpacity
+              style={styles.checkboxTouchable}
+              onPress={() => setData({ ...data, termsConsent: !data.termsConsent })}
+            >
+              <View style={[styles.checkbox, data.termsConsent && styles.checkboxChecked]}>
+                {data.termsConsent && <Check size={16} color={Colors.background} />}
+              </View>
+            </TouchableOpacity>
+            <View style={styles.agreementContent}>
+              <Text style={styles.agreementTextWrapper}>
+                <TouchableOpacity onPress={() => Linking.openURL('https://www.compassabroad.com.tr/acik-riza-beyan-formu/')}>
+                  <Text style={styles.agreementLink}>Açık Rıza Beyanı</Text>
+                </TouchableOpacity>
+              </Text>
+              <Text style={styles.agreementLabel}>{"'nı okudum ve kabul ediyorum"}</Text>
+            </View>
+          </View>
+        </View>
+
+        {showWarning && (
+          <View style={styles.warningBox}>
+            <Shield size={18} color={Colors.error} />
+            <Text style={styles.warningText}>
+              Devam edebilmek için tüm sözleşmeleri onaylamanız gerekmektedir.
+            </Text>
+          </View>
+        )}
+
+        <View style={styles.infoBox}>
+          <Shield size={20} color={Colors.info} />
+          <Text style={styles.infoText}>
+            Bilgileriniz KVKK kapsamında güvenle saklanmaktadır ve üçüncü taraflarla paylaşılmamaktadır.
+          </Text>
+        </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   const renderStep6 = () => (
     <View style={styles.stepContent}>
@@ -1044,6 +1051,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
   },
+  agreementItemUnchecked: {
+    borderColor: Colors.error + '50',
+  },
+  checkboxTouchable: {
+    marginRight: 14,
+  },
   checkbox: {
     width: 24,
     height: 24,
@@ -1052,7 +1065,6 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 14,
   },
   checkboxChecked: {
     backgroundColor: Colors.success,
@@ -1062,22 +1074,34 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   agreementLabel: {
-    fontSize: 15,
-    fontWeight: '600' as const,
+    fontSize: 14,
     color: Colors.text,
-    marginBottom: 4,
   },
-  agreementDescription: {
-    fontSize: 13,
-    color: Colors.textSecondary,
+  agreementTextWrapper: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
   },
   agreementLink: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: Colors.secondary + '20',
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: Colors.secondary,
+    textDecorationLine: 'underline',
+  },
+  warningBox: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: Colors.error + '15',
+    padding: 14,
+    borderRadius: 12,
+    marginBottom: 16,
+  },
+  warningText: {
+    flex: 1,
+    fontSize: 13,
+    color: Colors.error,
+    lineHeight: 18,
   },
   infoBox: {
     flexDirection: 'row',
