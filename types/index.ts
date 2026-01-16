@@ -8,6 +8,8 @@ export type StudentStage =
   | 'orientation'
   | 'departed';
 
+export type StudentInvitationStatus = 'pending_kvkk' | 'completed';
+
 export interface Student {
   id: string;
   name: string;
@@ -19,6 +21,11 @@ export interface Student {
   updatedAt: string;
   avatar?: string;
   country?: string;
+  invitationStatus?: StudentInvitationStatus;
+  invitationToken?: string;
+  invitedAt?: string;
+  invitedByAmbassadorId?: string;
+  notes?: string;
 }
 
 export type ProgramType = 
