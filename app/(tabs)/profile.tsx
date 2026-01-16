@@ -19,8 +19,7 @@ import {
   Copy,
   Award,
   CreditCard,
-  Shield,
-  ChevronRight,
+
   Check,
   LogOut,
   Bell,
@@ -72,7 +71,7 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [savedIbans, setSavedIbans] = useState<SavedIban[]>(MOCK_CURRENT_AMBASSADOR.savedIbans || []);
-  const [kvkkConsent, setKvkkConsent] = useState(MOCK_CURRENT_AMBASSADOR.kvkkConsent);
+
   const [notifications, setNotifications] = useState(true);
   const [language, setLanguage] = useState<'tr' | 'en'>('tr');
   
@@ -117,20 +116,7 @@ export default function ProfileScreen() {
     );
   };
 
-  const handleKvkkToggle = (value: boolean) => {
-    if (!value) {
-      Alert.alert(
-        'KVKK Onayı',
-        'KVKK onayını geri çekerseniz bazı özellikler kısıtlanabilir. Devam etmek istiyor musunuz?',
-        [
-          { text: 'İptal', style: 'cancel' },
-          { text: 'Devam', onPress: () => setKvkkConsent(false) },
-        ]
-      );
-    } else {
-      setKvkkConsent(true);
-    }
-  };
+
 
   const formatIbanDisplay = (iban: string) => {
     const cleaned = iban.replace(/\s/g, '');
@@ -567,44 +553,6 @@ export default function ProfileScreen() {
                   EN
                 </Text>
               </View>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Yasal</Text>
-          
-          <View style={styles.settingsCard}>
-            <View style={styles.settingItem}>
-              <View style={styles.settingLeft}>
-                <View style={[styles.settingIcon, { backgroundColor: Colors.success + '20' }]}>
-                  <Shield size={18} color={Colors.success} />
-                </View>
-                <View>
-                  <Text style={styles.settingLabel}>KVKK Onayı</Text>
-                  <Text style={styles.settingSubtext}>
-                    Kişisel verilerin işlenmesine izin
-                  </Text>
-                </View>
-              </View>
-              <Switch
-                value={kvkkConsent}
-                onValueChange={handleKvkkToggle}
-                trackColor={{ false: Colors.border, true: Colors.success }}
-                thumbColor={Colors.text}
-              />
-            </View>
-
-            <View style={styles.settingDivider} />
-
-            <TouchableOpacity style={styles.settingItem}>
-              <View style={styles.settingLeft}>
-                <View style={[styles.settingIcon, { backgroundColor: Colors.primary + '20' }]}>
-                  <Shield size={18} color={Colors.primary} />
-                </View>
-                <Text style={styles.settingLabel}>Gizlilik Politikası</Text>
-              </View>
-              <ChevronRight size={20} color={Colors.textMuted} />
             </TouchableOpacity>
           </View>
         </View>
