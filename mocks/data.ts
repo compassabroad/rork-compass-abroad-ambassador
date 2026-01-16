@@ -263,8 +263,8 @@ export const MOCK_CURRENT_AMBASSADOR: Ambassador = {
   subAmbassadors: ['sub1', 'sub2', 'sub3'],
   iban: 'TR120001001234567890123456',
   savedIbans: [
-    { id: '1', iban: 'TR120001001234567890123456', bankName: 'Ziraat Bankası', isDefault: true },
-    { id: '2', iban: 'TR980006401234567890123456', bankName: 'İş Bankası', isDefault: false },
+    { id: '1', iban: 'TR120001001234567890123456', bankName: 'Ziraat Bankası', isDefault: true, status: 'approved', submittedAt: '2023-06-15', approvedAt: '2023-06-16' },
+    { id: '2', iban: 'TR980006401234567890123456', bankName: 'İş Bankası', isDefault: false, status: 'approved', submittedAt: '2023-08-10', approvedAt: '2023-08-11' },
   ],
   kvkkConsent: true,
   kvkkConsentDate: '2023-06-15',

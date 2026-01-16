@@ -252,9 +252,14 @@ export interface SocialMediaLinks {
   facebook: string;
 }
 
+export type BankAccountStatus = 'pending' | 'approved' | 'rejected';
+
 export interface SavedIban {
   id: string;
   iban: string;
   bankName: string;
   isDefault: boolean;
+  status: BankAccountStatus;
+  submittedAt?: string;
+  approvedAt?: string;
 }
