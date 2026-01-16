@@ -331,10 +331,21 @@ export default function ProfileScreen() {
               </View>
             )}
             <Text style={styles.profileEmail}>{MOCK_CURRENT_AMBASSADOR.email}</Text>
-            <View style={[styles.typeBadge, { backgroundColor: typeInfo.color + '20' }]}>
-              <Text style={[styles.typeBadgeText, { color: typeInfo.color }]}>
-                {typeInfo.tr} Elçi
-              </Text>
+            <View style={styles.badgeRow}>
+              <View style={[styles.typeBadge, { backgroundColor: typeInfo.color + '20' }]}>
+                <Text style={[styles.typeBadgeText, { color: typeInfo.color }]}>
+                  {typeInfo.tr} Elçi
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.editProfileButton}
+                onPress={() => router.push('/profile/edit')}
+                accessibilityLabel="Profili Düzenle"
+                accessibilityRole="button"
+              >
+                <Feather name="edit-2" size={14} color="#FFD700" />
+                <Text style={styles.editProfileButtonText}>Profili Düzenle</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -824,8 +835,12 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     marginBottom: 8,
   },
+  badgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
   typeBadge: {
-    alignSelf: 'flex-start',
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 12,
@@ -833,6 +848,18 @@ const styles = StyleSheet.create({
   typeBadgeText: {
     fontSize: 12,
     fontWeight: '600',
+  },
+  editProfileButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'transparent',
+    paddingVertical: 4,
+  },
+  editProfileButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#FFD700',
   },
   content: {
     flex: 1,
