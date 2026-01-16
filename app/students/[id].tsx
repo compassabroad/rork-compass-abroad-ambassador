@@ -22,6 +22,7 @@ import {
   CheckCircle,
   Circle,
   DollarSign,
+  XCircle,
 } from 'lucide-react-native';
 
 import Colors from '@/constants/colors';
@@ -29,7 +30,19 @@ import { useExchangeRate } from '@/contexts/ExchangeRateContext';
 import { MOCK_STUDENTS, MOCK_STUDENT_PIPELINES, PROGRAMS, MOCK_CURRENT_AMBASSADOR } from '@/mocks/data';
 import { STAGE_LABELS, StudentStage } from '@/types';
 
-const STAGES: StudentStage[] = ['registered', 'documents', 'application', 'interview', 'visa', 'approved', 'departed'];
+const calculateEarnedCommission = (stage: StudentStage, totalCommission: number): number => {
+  let percent = 0;
+  if (['registered', 'documents_completed', 'visa_applied'].includes(stage)) {
+    percent = 25;
+  } else if (['visa_approved', 'orientation'].includes(stage)) {
+    percent = 50;
+  } else if (stage === 'departed') {
+    percent = 100;
+  } else if (stage === 'visa_rejected') {
+    percent = 25;
+  }
+  return Math.floor(totalCommission * (percent / 100));
+};
 
 export default function StudentDetailScreen() {
   const insets = useSafeAreaInsets();
@@ -55,8 +68,8 @@ export default function StudentDetailScreen() {
     );
   }
 
-  const currentStageIndex = STAGES.indexOf(student.stage);
-  const earnedCommission = program ? Math.floor(program.commission * (currentStageIndex / (STAGES.length - 1))) : 0;
+  const isRejected = student.stage === 'visa_rejected';
+  const earnedCommission = program ? calculateEarnedCommission(student.stage, program.commission) : 0;
 
   const handleCall = () => {
     const phoneUrl = `tel:${student.phone.replace(/\s/g, '')}`;
@@ -164,21 +177,33 @@ export default function StudentDetailScreen() {
         <View style={styles.timelineCard}>
           <Text style={styles.cardTitle}>Pipeline Durumu</Text>
           
+          {isRejected && (
+            <View style={styles.rejectedBanner}>
+              <XCircle size={20} color={Colors.error} />
+              <Text style={styles.rejectedText}>Vize başvurusu reddedildi</Text>
+            </View>
+          )}
+          
           <View style={styles.timeline}>
-            {pipeline?.map((stage, index) => {
-              const isCompleted = stage.date !== null;
-              const isCurrent = STAGES[index] === student.stage;
-              const stageInfo = STAGE_LABELS[STAGES[index] as StudentStage];
+            {pipeline?.map((stageData, index) => {
+              const isStageCompleted = stageData.date !== null;
+              const isCurrent = stageData.stage === student.stage;
+              const stageInfo = STAGE_LABELS[stageData.stage as StudentStage];
+              const isStageRejected = stageData.stage === 'visa_rejected' && stageData.isRejected;
+              const commissionPercent = stageInfo?.commissionPercent || 0;
               
               return (
-                <View key={stage.stage} style={styles.timelineItem}>
+                <View key={stageData.stage} style={styles.timelineItem}>
                   <View style={styles.timelineLeft}>
                     <View style={[
                       styles.timelineDot,
-                      isCompleted && styles.timelineDotCompleted,
-                      isCurrent && styles.timelineDotCurrent,
+                      isStageCompleted && !isStageRejected && styles.timelineDotCompleted,
+                      isCurrent && !isStageRejected && styles.timelineDotCurrent,
+                      isStageRejected && styles.timelineDotRejected,
                     ]}>
-                      {isCompleted ? (
+                      {isStageRejected ? (
+                        <XCircle size={16} color={Colors.text} />
+                      ) : isStageCompleted ? (
                         <CheckCircle size={16} color={Colors.text} />
                       ) : (
                         <Circle size={16} color={Colors.textMuted} />
@@ -187,20 +212,29 @@ export default function StudentDetailScreen() {
                     {index < (pipeline?.length ?? 0) - 1 && (
                       <View style={[
                         styles.timelineLine,
-                        isCompleted && styles.timelineLineCompleted,
+                        isStageCompleted && !isStageRejected && styles.timelineLineCompleted,
+                        isStageRejected && styles.timelineLineRejected,
                       ]} />
                     )}
                   </View>
                   
                   <View style={styles.timelineContent}>
-                    <Text style={[
-                      styles.timelineStageName,
-                      isCurrent && styles.timelineStageNameCurrent,
-                    ]}>
-                      {stageInfo?.tr || stage.stage}
-                    </Text>
+                    <View style={styles.timelineHeader}>
+                      <Text style={[
+                        styles.timelineStageName,
+                        isCurrent && !isStageRejected && styles.timelineStageNameCurrent,
+                        isStageRejected && styles.timelineStageNameRejected,
+                      ]}>
+                        {stageInfo?.tr || stageData.stage}
+                      </Text>
+                      {commissionPercent > 0 && (
+                        <View style={styles.commissionBadge}>
+                          <Text style={styles.commissionBadgeText}>%{commissionPercent}</Text>
+                        </View>
+                      )}
+                    </View>
                     <Text style={styles.timelineDate}>
-                      {stage.date ? formatDate(stage.date) : 'Bekliyor'}
+                      {stageData.date ? formatDate(stageData.date) : 'Bekliyor'}
                     </Text>
                   </View>
                 </View>
@@ -417,9 +451,21 @@ const styles = StyleSheet.create({
   timelineLineCompleted: {
     backgroundColor: Colors.success,
   },
+  timelineDotRejected: {
+    backgroundColor: Colors.error,
+    borderColor: Colors.error,
+  },
+  timelineLineRejected: {
+    backgroundColor: Colors.error,
+  },
   timelineContent: {
     flex: 1,
     paddingBottom: 16,
+  },
+  timelineHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   timelineStageName: {
     fontSize: 14,
@@ -429,6 +475,34 @@ const styles = StyleSheet.create({
   },
   timelineStageNameCurrent: {
     color: Colors.secondary,
+  },
+  timelineStageNameRejected: {
+    color: Colors.error,
+  },
+  commissionBadge: {
+    backgroundColor: Colors.secondary + '30',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  commissionBadgeText: {
+    fontSize: 11,
+    fontWeight: '600' as const,
+    color: Colors.secondary,
+  },
+  rejectedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.error + '20',
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 16,
+    gap: 8,
+  },
+  rejectedText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: Colors.error,
   },
   timelineDate: {
     fontSize: 12,

@@ -1,10 +1,11 @@
 export type StudentStage = 
+  | 'pre_payment'
   | 'registered'
-  | 'documents'
-  | 'application'
-  | 'interview'
-  | 'visa'
-  | 'approved'
+  | 'documents_completed'
+  | 'visa_applied'
+  | 'visa_approved'
+  | 'visa_rejected'
+  | 'orientation'
   | 'departed';
 
 export interface Student {
@@ -85,14 +86,15 @@ export interface NetworkNode {
   level: number;
 }
 
-export const STAGE_LABELS: Record<StudentStage, { tr: string; en: string }> = {
-  registered: { tr: 'Kayıtlı', en: 'Registered' },
-  documents: { tr: 'Belgeler', en: 'Documents' },
-  application: { tr: 'Başvuru', en: 'Application' },
-  interview: { tr: 'Mülakat', en: 'Interview' },
-  visa: { tr: 'Vize', en: 'Visa' },
-  approved: { tr: 'Onaylı', en: 'Approved' },
-  departed: { tr: 'Gitti', en: 'Departed' },
+export const STAGE_LABELS: Record<StudentStage, { tr: string; en: string; color: string; commissionPercent: number }> = {
+  pre_payment: { tr: 'Ön Ödeme', en: 'Pre Payment', color: '#9CA3AF', commissionPercent: 0 },
+  registered: { tr: 'Kayıt', en: 'Registered', color: '#3B82F6', commissionPercent: 25 },
+  documents_completed: { tr: 'Belgeler Tamam', en: 'Documents Completed', color: '#8B5CF6', commissionPercent: 0 },
+  visa_applied: { tr: 'Vize Başvurusu', en: 'Visa Applied', color: '#F59E0B', commissionPercent: 0 },
+  visa_approved: { tr: 'Vize Onaylandı', en: 'Visa Approved', color: '#10B981', commissionPercent: 25 },
+  visa_rejected: { tr: 'Vize Red', en: 'Visa Rejected', color: '#EF4444', commissionPercent: 0 },
+  orientation: { tr: 'Oryantasyon', en: 'Orientation', color: '#06B6D4', commissionPercent: 0 },
+  departed: { tr: 'Uçtu', en: 'Departed', color: '#22C55E', commissionPercent: 50 },
 };
 
 export const AMBASSADOR_TYPE_LABELS: Record<AmbassadorType, { tr: string; en: string; color: string }> = {

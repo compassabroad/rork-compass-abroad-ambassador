@@ -20,7 +20,7 @@ import Colors from '@/constants/colors';
 import { MOCK_STUDENTS, PROGRAMS } from '@/mocks/data';
 import { StudentStage, STAGE_LABELS, Student } from '@/types';
 
-const STAGES: StudentStage[] = ['registered', 'documents', 'application', 'interview', 'visa', 'approved', 'departed'];
+const STAGES: StudentStage[] = ['pre_payment', 'registered', 'documents_completed', 'visa_applied', 'visa_approved', 'visa_rejected', 'orientation', 'departed'];
 
 export default function StudentsScreen() {
   const insets = useSafeAreaInsets();

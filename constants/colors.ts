@@ -29,14 +29,15 @@ export default {
   borderLight: '#4A3A58',
   
   stages: {
-    registered: '#6366F1',
-    documents: '#8B5CF6',
-    application: '#A855F7',
-    interview: '#D946EF',
-    visa: '#EC4899',
-    approved: '#10B981',
-    departed: '#14B8A6',
-  },
+    pre_payment: '#9CA3AF',
+    registered: '#3B82F6',
+    documents_completed: '#8B5CF6',
+    visa_applied: '#F59E0B',
+    visa_approved: '#10B981',
+    visa_rejected: '#EF4444',
+    orientation: '#06B6D4',
+    departed: '#22C55E',
+  } as Record<string, string>,
   
   light: {
     text: '#FFFFFF',
