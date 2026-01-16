@@ -316,8 +316,10 @@ export default function ProfileScreen() {
               <TouchableOpacity
                 style={styles.editButton}
                 onPress={() => router.push('/profile/edit')}
+                accessibilityLabel="Profili Düzenle"
+                accessibilityRole="button"
               >
-                <Edit3 size={18} color="#FFD700" />
+                <Edit3 size={24} color="#FFD700" />
               </TouchableOpacity>
             </View>
             {MOCK_CURRENT_AMBASSADOR.pendingFirstName && (
@@ -787,12 +789,13 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   editButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: 'rgba(255, 215, 0, 0.2)',
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 215, 0, 0.25)',
     alignItems: 'center',
     justifyContent: 'center',
+    marginLeft: 8,
   },
   pendingNameBadge: {
     flexDirection: 'row',
