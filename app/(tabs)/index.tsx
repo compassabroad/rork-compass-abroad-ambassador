@@ -326,7 +326,7 @@ export default function DashboardScreen() {
           <View style={[styles.quickActionIcon, { backgroundColor: Colors.secondary + '30' }]}>
             <UserPlus size={20} color={Colors.secondary} />
           </View>
-          <Text style={styles.quickActionText}>Davet Et</Text>
+          <Text style={styles.quickActionText}>Öğrenci Davet Et</Text>
         </TouchableOpacity>
 
         <TouchableOpacity 
