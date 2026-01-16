@@ -317,7 +317,7 @@ export default function ProfileScreen() {
                 style={styles.editButton}
                 onPress={() => router.push('/profile/edit')}
               >
-                <Edit3 size={16} color={Colors.secondary} />
+                <Edit3 size={18} color="#FFD700" />
               </TouchableOpacity>
             </View>
             {MOCK_CURRENT_AMBASSADOR.pendingFirstName && (
@@ -787,10 +787,10 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   editButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: Colors.secondary + '20',
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255, 215, 0, 0.2)',
     alignItems: 'center',
     justifyContent: 'center',
   },
