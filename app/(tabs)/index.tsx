@@ -32,7 +32,6 @@ import {
 import { useRouter } from 'expo-router';
 
 import StudentAddModal, { NewStudent } from '@/components/StudentAddModal';
-import AmbassadorInviteModal from '@/components/AmbassadorInviteModal';
 import PaymentRequestModal, { WithdrawalRequest } from '@/components/PaymentRequestModal';
 import NotificationBell from '@/components/NotificationBell';
 import HowItWorksModal from '@/components/HowItWorksModal';
@@ -51,7 +50,6 @@ export default function DashboardScreen() {
   const [fadeAnim] = useState(() => new Animated.Value(0));
   
   const [showStudentModal, setShowStudentModal] = useState(false);
-  const [showAmbassadorModal, setShowAmbassadorModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showHowItWorksModal, setShowHowItWorksModal] = useState(false);
   
@@ -322,30 +320,30 @@ export default function DashboardScreen() {
       <View style={styles.quickActionsContainer}>
         <TouchableOpacity 
           style={styles.quickActionButton} 
-          onPress={() => setShowStudentModal(true)}
+          onPress={() => router.push('/invite/student')}
         >
-          <View style={[styles.quickActionIcon, { backgroundColor: Colors.success + '30' }]}>
-            <UserPlus size={20} color={Colors.success} />
+          <View style={[styles.quickActionIcon, { backgroundColor: Colors.secondary + '30' }]}>
+            <UserPlus size={20} color={Colors.secondary} />
           </View>
-          <Text style={styles.quickActionText}>Öğrenci</Text>
+          <Text style={styles.quickActionText}>Öğrenci Davet</Text>
         </TouchableOpacity>
         
         <TouchableOpacity 
           style={styles.quickActionButton} 
-          onPress={() => setShowAmbassadorModal(true)}
+          onPress={() => router.push('/invite/ambassador')}
         >
-          <View style={[styles.quickActionIcon, { backgroundColor: Colors.info + '30' }]}>
-            <Share2 size={20} color={Colors.info} />
+          <View style={[styles.quickActionIcon, { backgroundColor: '#8B5CF6' + '30' }]}>
+            <Share2 size={20} color="#8B5CF6" />
           </View>
-          <Text style={styles.quickActionText}>Davet</Text>
+          <Text style={styles.quickActionText}>Elçi Davet</Text>
         </TouchableOpacity>
         
         <TouchableOpacity 
           style={styles.quickActionButton} 
           onPress={() => setShowPaymentModal(true)}
         >
-          <View style={[styles.quickActionIcon, { backgroundColor: Colors.secondary + '30' }]}>
-            <Wallet size={20} color={Colors.secondary} />
+          <View style={[styles.quickActionIcon, { backgroundColor: Colors.success + '30' }]}>
+            <Wallet size={20} color={Colors.success} />
           </View>
           <Text style={styles.quickActionText}>Çekim</Text>
         </TouchableOpacity>
@@ -355,11 +353,6 @@ export default function DashboardScreen() {
         visible={showStudentModal}
         onClose={() => setShowStudentModal(false)}
         onSubmit={handleAddStudent}
-      />
-      
-      <AmbassadorInviteModal
-        visible={showAmbassadorModal}
-        onClose={() => setShowAmbassadorModal(false)}
       />
       
       <PaymentRequestModal

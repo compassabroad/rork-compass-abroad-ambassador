@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,10 +10,11 @@ import {
   Platform,
   Linking,
   KeyboardAvoidingView,
+  Modal,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import {
   Compass,
   User,
@@ -34,13 +35,35 @@ import {
   ChevronDown,
   CheckCircle,
   Clock,
+  Globe,
+  Target,
+  Lock,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 
 import Colors from '@/constants/colors';
 import { TURKISH_CITIES, AmbassadorCategory, IndividualSubType, CorporateSubType } from '@/types';
 
-interface OnboardingData {
+type RegistrationType = 'student' | 'ambassador' | null;
+
+interface StudentData {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  birthDate: string;
+  city: string;
+  interestedProgram: string;
+  targetCountry: string;
+  plannedSeason: string;
+  password: string;
+  confirmPassword: string;
+  privacyConsent: boolean;
+  kvkkConsent: boolean;
+  termsConsent: boolean;
+}
+
+interface AmbassadorData {
   firstName: string;
   lastName: string;
   email: string;
@@ -54,27 +77,82 @@ interface OnboardingData {
   companyName: string;
   taxNumber: string;
   taxOffice: string;
-  kvkkConsent: boolean;
+  password: string;
+  confirmPassword: string;
   privacyConsent: boolean;
+  kvkkConsent: boolean;
   termsConsent: boolean;
 }
 
-const STEPS = [
-  { id: 1, title: 'Hoş Geldiniz' },
-  { id: 2, title: 'Kişisel Bilgiler' },
-  { id: 3, title: 'Konum' },
-  { id: 4, title: 'Elçi Tipi' },
-  { id: 5, title: 'Sözleşmeler' },
-  { id: 6, title: 'Tamamlandı' },
+const INTERESTED_PROGRAMS = [
+  { id: 'camp_usa', label: 'Camp USA' },
+  { id: 'summer_school', label: 'Summer School' },
+  { id: 'work_and_travel', label: 'Work and Travel' },
+  { id: 'language_education', label: 'Dil Okulu' },
+  { id: 'high_school', label: 'Yurt Dışı Lise' },
+  { id: 'bachelor', label: 'Üniversite' },
+  { id: 'masters', label: 'Yüksek Lisans' },
+  { id: 'mba', label: 'MBA' },
+  { id: 'internship', label: 'Staj Programı' },
+  { id: 'au_pair', label: 'Au Pair' },
+  { id: 'group_summer_school', label: 'Yaz Okulu' },
+];
+
+const TARGET_COUNTRIES = [
+  { id: 'usa', label: 'ABD' },
+  { id: 'uk', label: 'İngiltere' },
+  { id: 'canada', label: 'Kanada' },
+  { id: 'germany', label: 'Almanya' },
+  { id: 'australia', label: 'Avustralya' },
+  { id: 'ireland', label: 'İrlanda' },
+  { id: 'malta', label: 'Malta' },
+  { id: 'other', label: 'Diğer' },
+];
+
+const PLANNED_SEASONS = [
+  { id: '2025_summer', label: '2025 Yaz' },
+  { id: '2025_fall', label: '2025 Güz' },
+  { id: '2026_summer', label: '2026 Yaz' },
+  { id: '2026_fall', label: '2026 Güz' },
+  { id: 'undecided', label: 'Henüz Karar Vermedim' },
 ];
 
 export default function OnboardingScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const [currentStep, setCurrentStep] = useState(1);
+  const params = useLocalSearchParams();
   const [slideAnim] = useState(() => new Animated.Value(0));
+  
+  const typeFromUrl = params.type as RegistrationType;
+  const refCode = params.ref as string | undefined;
+  
+  const [registrationType, setRegistrationType] = useState<RegistrationType>(typeFromUrl || null);
+  const [currentStep, setCurrentStep] = useState(typeFromUrl ? 1 : 0);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  
   const [showCityPicker, setShowCityPicker] = useState(false);
-  const [data, setData] = useState<OnboardingData>({
+  const [showProgramPicker, setShowProgramPicker] = useState(false);
+  const [showCountryPicker, setShowCountryPicker] = useState(false);
+  const [showSeasonPicker, setShowSeasonPicker] = useState(false);
+  
+  const [studentData, setStudentData] = useState<StudentData>({
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    birthDate: '',
+    city: '',
+    interestedProgram: '',
+    targetCountry: '',
+    plannedSeason: '',
+    password: '',
+    confirmPassword: '',
+    privacyConsent: false,
+    kvkkConsent: false,
+    termsConsent: false,
+  });
+  
+  const [ambassadorData, setAmbassadorData] = useState<AmbassadorData>({
     firstName: '',
     lastName: '',
     email: '',
@@ -88,10 +166,19 @@ export default function OnboardingScreen() {
     companyName: '',
     taxNumber: '',
     taxOffice: '',
-    kvkkConsent: false,
+    password: '',
+    confirmPassword: '',
     privacyConsent: false,
+    kvkkConsent: false,
     termsConsent: false,
   });
+
+  useEffect(() => {
+    if (typeFromUrl && (typeFromUrl === 'student' || typeFromUrl === 'ambassador')) {
+      setRegistrationType(typeFromUrl);
+      setCurrentStep(1);
+    }
+  }, [typeFromUrl]);
 
   const animateSlide = (direction: 'next' | 'back') => {
     const toValue = direction === 'next' ? -20 : 20;
@@ -109,32 +196,50 @@ export default function OnboardingScreen() {
     ]).start();
   };
 
+  const handleSelectType = async (type: RegistrationType) => {
+    if (Platform.OS !== 'web') {
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    setRegistrationType(type);
+    setCurrentStep(1);
+    animateSlide('next');
+  };
+
   const handleNext = async () => {
     if (Platform.OS !== 'web') {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
-    if (currentStep < 6) {
-      animateSlide('next');
-      setCurrentStep(currentStep + 1);
-    }
+    animateSlide('next');
+    setCurrentStep(currentStep + 1);
   };
 
   const handleBack = async () => {
     if (Platform.OS !== 'web') {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
-    if (currentStep > 1) {
-      animateSlide('back');
+    if (currentStep === 1 && !typeFromUrl) {
+      setRegistrationType(null);
+      setCurrentStep(0);
+    } else if (currentStep > 1) {
       setCurrentStep(currentStep - 1);
     }
+    animateSlide('back');
   };
 
-  const handleFinish = async () => {
+  const handleStudentRegister = async () => {
     if (Platform.OS !== 'web') {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
-    console.log('Onboarding completed:', data);
-    router.replace('/auth/pending-approval');
+    console.log('Student registration:', studentData, 'Referral:', refCode);
+    router.replace('/(tabs)');
+  };
+
+  const handleAmbassadorRegister = async () => {
+    if (Platform.OS !== 'web') {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+    console.log('Ambassador registration:', ambassadorData, 'Referral:', refCode);
+    setShowSuccessModal(true);
   };
 
   const validateEmail = (email: string): boolean => {
@@ -163,70 +268,115 @@ export default function OnboardingScreen() {
     return `${cleaned.slice(0, 2)}/${cleaned.slice(2, 4)}/${cleaned.slice(4, 8)}`;
   };
 
-  const canProceed = () => {
+  const openLink = (url: string) => {
+    Linking.openURL(url);
+  };
+
+  const canProceedStudent = () => {
     switch (currentStep) {
       case 1:
-        return true;
+        return (
+          studentData.firstName.trim().length >= 2 &&
+          studentData.lastName.trim().length >= 2 &&
+          validateEmail(studentData.email) &&
+          studentData.phone.length >= 13
+        );
       case 2:
         return (
-          data.firstName.trim().length >= 2 &&
-          data.lastName.trim().length >= 2 &&
-          validateEmail(data.email) &&
-          data.phone.length >= 13 &&
-          data.tcIdentity.length === 11
+          studentData.city.length > 0 &&
+          studentData.interestedProgram.length > 0 &&
+          studentData.targetCountry.length > 0 &&
+          studentData.plannedSeason.length > 0
         );
       case 3:
-        return data.city.length > 0;
-      case 4:
-        if (!data.category) return false;
-        if (data.category === 'individual' && !data.individualType) return false;
-        if (data.category === 'corporate') {
-          if (!data.corporateType) return false;
-          if (!data.companyName.trim() || !data.taxNumber.trim() || !data.taxOffice.trim()) return false;
-        }
-        return true;
-      case 5:
-        return data.kvkkConsent && data.privacyConsent && data.termsConsent;
-      case 6:
-        return true;
+        return (
+          studentData.password.length >= 6 &&
+          studentData.password === studentData.confirmPassword &&
+          studentData.privacyConsent &&
+          studentData.kvkkConsent &&
+          studentData.termsConsent
+        );
       default:
         return false;
     }
   };
 
-  const renderStep1 = () => (
+  const canProceedAmbassador = () => {
+    switch (currentStep) {
+      case 1:
+        return (
+          ambassadorData.firstName.trim().length >= 2 &&
+          ambassadorData.lastName.trim().length >= 2 &&
+          validateEmail(ambassadorData.email) &&
+          ambassadorData.phone.length >= 13 &&
+          ambassadorData.tcIdentity.length === 11
+        );
+      case 2:
+        return ambassadorData.city.length > 0;
+      case 3:
+        if (!ambassadorData.category) return false;
+        if (ambassadorData.category === 'individual' && !ambassadorData.individualType) return false;
+        if (ambassadorData.category === 'corporate') {
+          if (!ambassadorData.corporateType) return false;
+          if (!ambassadorData.companyName.trim() || !ambassadorData.taxNumber.trim() || !ambassadorData.taxOffice.trim()) return false;
+        }
+        return true;
+      case 4:
+        return (
+          ambassadorData.password.length >= 6 &&
+          ambassadorData.password === ambassadorData.confirmPassword &&
+          ambassadorData.privacyConsent &&
+          ambassadorData.kvkkConsent &&
+          ambassadorData.termsConsent
+        );
+      default:
+        return false;
+    }
+  };
+
+  const renderTypeSelection = () => (
     <View style={styles.stepContent}>
       <View style={styles.welcomeIcon}>
         <Compass size={80} color={Colors.secondary} />
       </View>
-      <Text style={styles.welcomeTitle}>Compass Abroad Ambassador</Text>
+      <Text style={styles.welcomeTitle}>Compass Abroad</Text>
       <Text style={styles.welcomeSubtitle}>
-        Yurtdışı eğitim danışmanlığında yeni bir yolculuğa hoş geldiniz!
+        Nasıl kayıt olmak istersiniz?
       </Text>
-      <View style={styles.featureList}>
-        <View style={styles.featureItem}>
-          <View style={[styles.featureIcon, { backgroundColor: Colors.success + '20' }]}>
-            <Users size={20} color={Colors.success} />
+
+      <View style={styles.typeSelectionContainer}>
+        <TouchableOpacity
+          style={styles.typeCard}
+          onPress={() => handleSelectType('student')}
+        >
+          <View style={[styles.typeIconContainer, { backgroundColor: Colors.secondary + '20' }]}>
+            <GraduationCap size={40} color={Colors.secondary} />
           </View>
-          <Text style={styles.featureText}>Öğrenci referanslarından komisyon kazanın</Text>
-        </View>
-        <View style={styles.featureItem}>
-          <View style={[styles.featureIcon, { backgroundColor: Colors.info + '20' }]}>
-            <Building2 size={20} color={Colors.info} />
+          <Text style={styles.typeTitle}>Öğrenci Olarak Kayıt Ol</Text>
+          <Text style={styles.typeDescription}>
+            Yurt dışı eğitim programlarına başvurmak için kayıt olun
+          </Text>
+          <ChevronRight size={24} color={Colors.secondary} style={styles.typeArrow} />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.typeCard, styles.ambassadorCard]}
+          onPress={() => handleSelectType('ambassador')}
+        >
+          <View style={[styles.typeIconContainer, { backgroundColor: '#8B5CF6' + '20' }]}>
+            <Users size={40} color="#8B5CF6" />
           </View>
-          <Text style={styles.featureText}>Kendi ağınızı oluşturun ve büyütün</Text>
-        </View>
-        <View style={styles.featureItem}>
-          <View style={[styles.featureIcon, { backgroundColor: Colors.secondary + '20' }]}>
-            <GraduationCap size={20} color={Colors.secondary} />
-          </View>
-          <Text style={styles.featureText}>11 farklı program seçeneği ile çalışın</Text>
-        </View>
+          <Text style={styles.typeTitle}>Elçi Olarak Kayıt Ol</Text>
+          <Text style={styles.typeDescription}>
+            Öğrenci referansları ile komisyon kazanmak için kayıt olun
+          </Text>
+          <ChevronRight size={24} color="#8B5CF6" style={styles.typeArrow} />
+        </TouchableOpacity>
       </View>
     </View>
   );
 
-  const renderStep2 = () => (
+  const renderStudentStep1 = () => (
     <ScrollView style={styles.stepContent} showsVerticalScrollIndicator={false}>
       <Text style={styles.stepTitle}>Kişisel Bilgiler</Text>
       <Text style={styles.stepDescription}>Hesabınızı oluşturmak için bilgilerinizi girin</Text>
@@ -239,8 +389,8 @@ export default function OnboardingScreen() {
           </View>
           <TextInput
             style={styles.input}
-            value={data.firstName}
-            onChangeText={(text) => setData({ ...data, firstName: text })}
+            value={studentData.firstName}
+            onChangeText={(text) => setStudentData({ ...studentData, firstName: text })}
             placeholder="Adınız"
             placeholderTextColor={Colors.textMuted}
           />
@@ -252,8 +402,8 @@ export default function OnboardingScreen() {
           </View>
           <TextInput
             style={styles.input}
-            value={data.lastName}
-            onChangeText={(text) => setData({ ...data, lastName: text })}
+            value={studentData.lastName}
+            onChangeText={(text) => setStudentData({ ...studentData, lastName: text })}
             placeholder="Soyadınız"
             placeholderTextColor={Colors.textMuted}
           />
@@ -266,17 +416,14 @@ export default function OnboardingScreen() {
           <Text style={styles.inputLabel}>E-posta *</Text>
         </View>
         <TextInput
-          style={[styles.input, !validateEmail(data.email) && data.email.length > 0 && styles.inputError]}
-          value={data.email}
-          onChangeText={(text) => setData({ ...data, email: text.toLowerCase() })}
+          style={[styles.input, !validateEmail(studentData.email) && studentData.email.length > 0 && styles.inputError]}
+          value={studentData.email}
+          onChangeText={(text) => setStudentData({ ...studentData, email: text.toLowerCase() })}
           placeholder="ornek@email.com"
           placeholderTextColor={Colors.textMuted}
           keyboardType="email-address"
           autoCapitalize="none"
         />
-        {!validateEmail(data.email) && data.email.length > 0 && (
-          <Text style={styles.errorText}>Geçerli bir e-posta adresi girin</Text>
-        )}
       </View>
 
       <View style={styles.inputContainer}>
@@ -286,8 +433,8 @@ export default function OnboardingScreen() {
         </View>
         <TextInput
           style={styles.input}
-          value={data.phone}
-          onChangeText={(text) => setData({ ...data, phone: formatPhone(text) })}
+          value={studentData.phone}
+          onChangeText={(text) => setStudentData({ ...studentData, phone: formatPhone(text) })}
           placeholder="+90 5XX XXX XX XX"
           placeholderTextColor={Colors.textMuted}
           keyboardType="phone-pad"
@@ -301,8 +448,8 @@ export default function OnboardingScreen() {
         </View>
         <TextInput
           style={styles.input}
-          value={data.birthDate}
-          onChangeText={(text) => setData({ ...data, birthDate: formatDate(text) })}
+          value={studentData.birthDate}
+          onChangeText={(text) => setStudentData({ ...studentData, birthDate: formatDate(text) })}
           placeholder="GG/AA/YYYY"
           placeholderTextColor={Colors.textMuted}
           keyboardType="numeric"
@@ -310,31 +457,14 @@ export default function OnboardingScreen() {
         />
       </View>
 
-      <View style={styles.inputContainer}>
-        <View style={styles.inputLabelRow}>
-          <CreditCard size={16} color={Colors.secondary} />
-          <Text style={styles.inputLabel}>TC Kimlik No *</Text>
-        </View>
-        <TextInput
-          style={styles.input}
-          value={data.tcIdentity}
-          onChangeText={(text) => setData({ ...data, tcIdentity: text.replace(/[^0-9]/g, '').slice(0, 11) })}
-          placeholder="XXXXXXXXXXX"
-          placeholderTextColor={Colors.textMuted}
-          keyboardType="numeric"
-          maxLength={11}
-        />
-        <Text style={styles.inputHint}>{data.tcIdentity.length}/11 karakter</Text>
-      </View>
-
       <View style={{ height: 40 }} />
     </ScrollView>
   );
 
-  const renderStep3 = () => (
-    <View style={styles.stepContent}>
-      <Text style={styles.stepTitle}>Konum Bilgisi</Text>
-      <Text style={styles.stepDescription}>Bulunduğunuz şehri seçin</Text>
+  const renderStudentStep2 = () => (
+    <ScrollView style={styles.stepContent} showsVerticalScrollIndicator={false}>
+      <Text style={styles.stepTitle}>Program Tercihleri</Text>
+      <Text style={styles.stepDescription}>İlgilendiğiniz program ve ülkeyi seçin</Text>
 
       <View style={styles.inputContainer}>
         <View style={styles.inputLabelRow}>
@@ -345,8 +475,387 @@ export default function OnboardingScreen() {
           style={styles.pickerButton}
           onPress={() => setShowCityPicker(!showCityPicker)}
         >
-          <Text style={data.city ? styles.pickerText : styles.pickerPlaceholder}>
-            {data.city || 'Şehir seçin'}
+          <Text style={studentData.city ? styles.pickerText : styles.pickerPlaceholder}>
+            {studentData.city || 'Şehir seçin'}
+          </Text>
+          <ChevronDown size={20} color={Colors.textSecondary} />
+        </TouchableOpacity>
+        {showCityPicker && (
+          <ScrollView style={styles.pickerList} nestedScrollEnabled>
+            {TURKISH_CITIES.map((city) => (
+              <TouchableOpacity
+                key={city}
+                style={[styles.pickerOption, studentData.city === city && styles.pickerOptionSelected]}
+                onPress={() => {
+                  setStudentData({ ...studentData, city });
+                  setShowCityPicker(false);
+                }}
+              >
+                <Text style={[styles.pickerOptionText, studentData.city === city && styles.pickerOptionTextSelected]}>
+                  {city}
+                </Text>
+                {studentData.city === city && <Check size={16} color={Colors.secondary} />}
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )}
+      </View>
+
+      <View style={styles.inputContainer}>
+        <View style={styles.inputLabelRow}>
+          <GraduationCap size={16} color={Colors.secondary} />
+          <Text style={styles.inputLabel}>İlgilendiği Program *</Text>
+        </View>
+        <TouchableOpacity
+          style={styles.pickerButton}
+          onPress={() => setShowProgramPicker(!showProgramPicker)}
+        >
+          <Text style={studentData.interestedProgram ? styles.pickerText : styles.pickerPlaceholder}>
+            {INTERESTED_PROGRAMS.find(p => p.id === studentData.interestedProgram)?.label || 'Program seçin'}
+          </Text>
+          <ChevronDown size={20} color={Colors.textSecondary} />
+        </TouchableOpacity>
+        {showProgramPicker && (
+          <ScrollView style={styles.pickerList} nestedScrollEnabled>
+            {INTERESTED_PROGRAMS.map((program) => (
+              <TouchableOpacity
+                key={program.id}
+                style={[styles.pickerOption, studentData.interestedProgram === program.id && styles.pickerOptionSelected]}
+                onPress={() => {
+                  setStudentData({ ...studentData, interestedProgram: program.id });
+                  setShowProgramPicker(false);
+                }}
+              >
+                <Text style={[styles.pickerOptionText, studentData.interestedProgram === program.id && styles.pickerOptionTextSelected]}>
+                  {program.label}
+                </Text>
+                {studentData.interestedProgram === program.id && <Check size={16} color={Colors.secondary} />}
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )}
+      </View>
+
+      <View style={styles.inputContainer}>
+        <View style={styles.inputLabelRow}>
+          <Globe size={16} color={Colors.secondary} />
+          <Text style={styles.inputLabel}>Hedef Ülke *</Text>
+        </View>
+        <TouchableOpacity
+          style={styles.pickerButton}
+          onPress={() => setShowCountryPicker(!showCountryPicker)}
+        >
+          <Text style={studentData.targetCountry ? styles.pickerText : styles.pickerPlaceholder}>
+            {TARGET_COUNTRIES.find(c => c.id === studentData.targetCountry)?.label || 'Ülke seçin'}
+          </Text>
+          <ChevronDown size={20} color={Colors.textSecondary} />
+        </TouchableOpacity>
+        {showCountryPicker && (
+          <ScrollView style={styles.pickerList} nestedScrollEnabled>
+            {TARGET_COUNTRIES.map((country) => (
+              <TouchableOpacity
+                key={country.id}
+                style={[styles.pickerOption, studentData.targetCountry === country.id && styles.pickerOptionSelected]}
+                onPress={() => {
+                  setStudentData({ ...studentData, targetCountry: country.id });
+                  setShowCountryPicker(false);
+                }}
+              >
+                <Text style={[styles.pickerOptionText, studentData.targetCountry === country.id && styles.pickerOptionTextSelected]}>
+                  {country.label}
+                </Text>
+                {studentData.targetCountry === country.id && <Check size={16} color={Colors.secondary} />}
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )}
+      </View>
+
+      <View style={styles.inputContainer}>
+        <View style={styles.inputLabelRow}>
+          <Target size={16} color={Colors.secondary} />
+          <Text style={styles.inputLabel}>Planlanan Dönem *</Text>
+        </View>
+        <TouchableOpacity
+          style={styles.pickerButton}
+          onPress={() => setShowSeasonPicker(!showSeasonPicker)}
+        >
+          <Text style={studentData.plannedSeason ? styles.pickerText : styles.pickerPlaceholder}>
+            {PLANNED_SEASONS.find(s => s.id === studentData.plannedSeason)?.label || 'Dönem seçin'}
+          </Text>
+          <ChevronDown size={20} color={Colors.textSecondary} />
+        </TouchableOpacity>
+        {showSeasonPicker && (
+          <ScrollView style={styles.pickerList} nestedScrollEnabled>
+            {PLANNED_SEASONS.map((season) => (
+              <TouchableOpacity
+                key={season.id}
+                style={[styles.pickerOption, studentData.plannedSeason === season.id && styles.pickerOptionSelected]}
+                onPress={() => {
+                  setStudentData({ ...studentData, plannedSeason: season.id });
+                  setShowSeasonPicker(false);
+                }}
+              >
+                <Text style={[styles.pickerOptionText, studentData.plannedSeason === season.id && styles.pickerOptionTextSelected]}>
+                  {season.label}
+                </Text>
+                {studentData.plannedSeason === season.id && <Check size={16} color={Colors.secondary} />}
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )}
+      </View>
+
+      <View style={{ height: 40 }} />
+    </ScrollView>
+  );
+
+  const renderStudentStep3 = () => {
+    const allConsentsGiven = studentData.privacyConsent && studentData.kvkkConsent && studentData.termsConsent;
+    const passwordsMatch = studentData.password === studentData.confirmPassword;
+    const passwordValid = studentData.password.length >= 6;
+
+    return (
+      <ScrollView style={styles.stepContent} showsVerticalScrollIndicator={false}>
+        <Text style={styles.stepTitle}>Şifre ve Onaylar</Text>
+        <Text style={styles.stepDescription}>Hesabınızı güvence altına alın</Text>
+
+        <View style={styles.inputContainer}>
+          <View style={styles.inputLabelRow}>
+            <Lock size={16} color={Colors.secondary} />
+            <Text style={styles.inputLabel}>Şifre *</Text>
+          </View>
+          <TextInput
+            style={[styles.input, !passwordValid && studentData.password.length > 0 && styles.inputError]}
+            value={studentData.password}
+            onChangeText={(text) => setStudentData({ ...studentData, password: text })}
+            placeholder="En az 6 karakter"
+            placeholderTextColor={Colors.textMuted}
+            secureTextEntry
+          />
+          {!passwordValid && studentData.password.length > 0 && (
+            <Text style={styles.errorText}>Şifre en az 6 karakter olmalıdır</Text>
+          )}
+        </View>
+
+        <View style={styles.inputContainer}>
+          <View style={styles.inputLabelRow}>
+            <Lock size={16} color={Colors.secondary} />
+            <Text style={styles.inputLabel}>Şifre Tekrar *</Text>
+          </View>
+          <TextInput
+            style={[styles.input, !passwordsMatch && studentData.confirmPassword.length > 0 && styles.inputError]}
+            value={studentData.confirmPassword}
+            onChangeText={(text) => setStudentData({ ...studentData, confirmPassword: text })}
+            placeholder="Şifrenizi tekrar girin"
+            placeholderTextColor={Colors.textMuted}
+            secureTextEntry
+          />
+          {!passwordsMatch && studentData.confirmPassword.length > 0 && (
+            <Text style={styles.errorText}>Şifreler eşleşmiyor</Text>
+          )}
+        </View>
+
+        <View style={styles.agreementsList}>
+          <View style={[styles.agreementItem, !studentData.privacyConsent && styles.agreementItemUnchecked]}>
+            <TouchableOpacity
+              style={styles.checkboxTouchable}
+              onPress={() => setStudentData({ ...studentData, privacyConsent: !studentData.privacyConsent })}
+            >
+              <View style={[styles.checkbox, studentData.privacyConsent && styles.checkboxChecked]}>
+                {studentData.privacyConsent && <Check size={16} color={Colors.background} />}
+              </View>
+            </TouchableOpacity>
+            <View style={styles.agreementContent}>
+              <Text style={styles.agreementText}>
+                <Text
+                  style={styles.agreementLink}
+                  onPress={() => openLink('https://www.compassabroad.com.tr/gizlilik-politikasi/')}
+                >
+                  Gizlilik Politikası
+                </Text>
+                <Text style={styles.agreementLabel}>{"'nı okudum ve kabul ediyorum"}</Text>
+              </Text>
+            </View>
+          </View>
+
+          <View style={[styles.agreementItem, !studentData.kvkkConsent && styles.agreementItemUnchecked]}>
+            <TouchableOpacity
+              style={styles.checkboxTouchable}
+              onPress={() => setStudentData({ ...studentData, kvkkConsent: !studentData.kvkkConsent })}
+            >
+              <View style={[styles.checkbox, studentData.kvkkConsent && styles.checkboxChecked]}>
+                {studentData.kvkkConsent && <Check size={16} color={Colors.background} />}
+              </View>
+            </TouchableOpacity>
+            <View style={styles.agreementContent}>
+              <Text style={styles.agreementText}>
+                <Text
+                  style={styles.agreementLink}
+                  onPress={() => openLink('https://www.compassabroad.com.tr/kvkk-aydinlatma-metni/')}
+                >
+                  KVKK Aydınlatma Metni
+                </Text>
+                <Text style={styles.agreementLabel}>{"'ni okudum ve kabul ediyorum"}</Text>
+              </Text>
+            </View>
+          </View>
+
+          <View style={[styles.agreementItem, !studentData.termsConsent && styles.agreementItemUnchecked]}>
+            <TouchableOpacity
+              style={styles.checkboxTouchable}
+              onPress={() => setStudentData({ ...studentData, termsConsent: !studentData.termsConsent })}
+            >
+              <View style={[styles.checkbox, studentData.termsConsent && styles.checkboxChecked]}>
+                {studentData.termsConsent && <Check size={16} color={Colors.background} />}
+              </View>
+            </TouchableOpacity>
+            <View style={styles.agreementContent}>
+              <Text style={styles.agreementText}>
+                <Text
+                  style={styles.agreementLink}
+                  onPress={() => openLink('https://www.compassabroad.com.tr/acik-riza-beyan-formu/')}
+                >
+                  Açık Rıza Beyanı
+                </Text>
+                <Text style={styles.agreementLabel}>{"'nı okudum ve kabul ediyorum"}</Text>
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {!allConsentsGiven && (
+          <View style={styles.warningBox}>
+            <Shield size={18} color={Colors.error} />
+            <Text style={styles.warningText}>
+              Devam edebilmek için tüm sözleşmeleri onaylamanız gerekmektedir.
+            </Text>
+          </View>
+        )}
+
+        <View style={{ height: 40 }} />
+      </ScrollView>
+    );
+  };
+
+  const renderAmbassadorStep1 = () => (
+    <ScrollView style={styles.stepContent} showsVerticalScrollIndicator={false}>
+      <Text style={styles.stepTitle}>Kişisel Bilgiler</Text>
+      <Text style={styles.stepDescription}>Elçi hesabınızı oluşturmak için bilgilerinizi girin</Text>
+
+      <View style={styles.inputRow}>
+        <View style={[styles.inputContainer, { flex: 1, marginRight: 8 }]}>
+          <View style={styles.inputLabelRow}>
+            <User size={16} color="#8B5CF6" />
+            <Text style={styles.inputLabel}>Ad *</Text>
+          </View>
+          <TextInput
+            style={styles.input}
+            value={ambassadorData.firstName}
+            onChangeText={(text) => setAmbassadorData({ ...ambassadorData, firstName: text })}
+            placeholder="Adınız"
+            placeholderTextColor={Colors.textMuted}
+          />
+        </View>
+        <View style={[styles.inputContainer, { flex: 1, marginLeft: 8 }]}>
+          <View style={styles.inputLabelRow}>
+            <User size={16} color="#8B5CF6" />
+            <Text style={styles.inputLabel}>Soyad *</Text>
+          </View>
+          <TextInput
+            style={styles.input}
+            value={ambassadorData.lastName}
+            onChangeText={(text) => setAmbassadorData({ ...ambassadorData, lastName: text })}
+            placeholder="Soyadınız"
+            placeholderTextColor={Colors.textMuted}
+          />
+        </View>
+      </View>
+
+      <View style={styles.inputContainer}>
+        <View style={styles.inputLabelRow}>
+          <Mail size={16} color="#8B5CF6" />
+          <Text style={styles.inputLabel}>E-posta *</Text>
+        </View>
+        <TextInput
+          style={[styles.input, !validateEmail(ambassadorData.email) && ambassadorData.email.length > 0 && styles.inputError]}
+          value={ambassadorData.email}
+          onChangeText={(text) => setAmbassadorData({ ...ambassadorData, email: text.toLowerCase() })}
+          placeholder="ornek@email.com"
+          placeholderTextColor={Colors.textMuted}
+          keyboardType="email-address"
+          autoCapitalize="none"
+        />
+      </View>
+
+      <View style={styles.inputContainer}>
+        <View style={styles.inputLabelRow}>
+          <Phone size={16} color="#8B5CF6" />
+          <Text style={styles.inputLabel}>Telefon *</Text>
+        </View>
+        <TextInput
+          style={styles.input}
+          value={ambassadorData.phone}
+          onChangeText={(text) => setAmbassadorData({ ...ambassadorData, phone: formatPhone(text) })}
+          placeholder="+90 5XX XXX XX XX"
+          placeholderTextColor={Colors.textMuted}
+          keyboardType="phone-pad"
+        />
+      </View>
+
+      <View style={styles.inputContainer}>
+        <View style={styles.inputLabelRow}>
+          <Calendar size={16} color="#8B5CF6" />
+          <Text style={styles.inputLabel}>Doğum Tarihi</Text>
+        </View>
+        <TextInput
+          style={styles.input}
+          value={ambassadorData.birthDate}
+          onChangeText={(text) => setAmbassadorData({ ...ambassadorData, birthDate: formatDate(text) })}
+          placeholder="GG/AA/YYYY"
+          placeholderTextColor={Colors.textMuted}
+          keyboardType="numeric"
+          maxLength={10}
+        />
+      </View>
+
+      <View style={styles.inputContainer}>
+        <View style={styles.inputLabelRow}>
+          <CreditCard size={16} color="#8B5CF6" />
+          <Text style={styles.inputLabel}>TC Kimlik No *</Text>
+        </View>
+        <TextInput
+          style={styles.input}
+          value={ambassadorData.tcIdentity}
+          onChangeText={(text) => setAmbassadorData({ ...ambassadorData, tcIdentity: text.replace(/[^0-9]/g, '').slice(0, 11) })}
+          placeholder="XXXXXXXXXXX"
+          placeholderTextColor={Colors.textMuted}
+          keyboardType="numeric"
+          maxLength={11}
+        />
+        <Text style={styles.inputHint}>{ambassadorData.tcIdentity.length}/11 karakter</Text>
+      </View>
+
+      <View style={{ height: 40 }} />
+    </ScrollView>
+  );
+
+  const renderAmbassadorStep2 = () => (
+    <View style={styles.stepContent}>
+      <Text style={styles.stepTitle}>Konum Bilgisi</Text>
+      <Text style={styles.stepDescription}>Bulunduğunuz şehri seçin</Text>
+
+      <View style={styles.inputContainer}>
+        <View style={styles.inputLabelRow}>
+          <MapPin size={16} color="#8B5CF6" />
+          <Text style={styles.inputLabel}>Şehir *</Text>
+        </View>
+        <TouchableOpacity
+          style={styles.pickerButton}
+          onPress={() => setShowCityPicker(!showCityPicker)}
+        >
+          <Text style={ambassadorData.city ? styles.pickerText : styles.pickerPlaceholder}>
+            {ambassadorData.city || 'Şehir seçin'}
           </Text>
           <ChevronDown size={20} color={Colors.textSecondary} />
         </TouchableOpacity>
@@ -357,16 +866,16 @@ export default function OnboardingScreen() {
           {TURKISH_CITIES.map((city) => (
             <TouchableOpacity
               key={city}
-              style={[styles.pickerOption, data.city === city && styles.pickerOptionSelected]}
+              style={[styles.pickerOption, ambassadorData.city === city && styles.pickerOptionSelected]}
               onPress={() => {
-                setData({ ...data, city });
+                setAmbassadorData({ ...ambassadorData, city });
                 setShowCityPicker(false);
               }}
             >
-              <Text style={[styles.pickerOptionText, data.city === city && styles.pickerOptionTextSelected]}>
+              <Text style={[styles.pickerOptionText, ambassadorData.city === city && styles.pickerOptionTextSelected]}>
                 {city}
               </Text>
-              {data.city === city && <Check size={16} color={Colors.secondary} />}
+              {ambassadorData.city === city && <Check size={16} color="#8B5CF6" />}
             </TouchableOpacity>
           ))}
         </ScrollView>
@@ -374,7 +883,7 @@ export default function OnboardingScreen() {
     </View>
   );
 
-  const renderStep4 = () => (
+  const renderAmbassadorStep3 = () => (
     <ScrollView style={styles.stepContent} showsVerticalScrollIndicator={false}>
       <Text style={styles.stepTitle}>Elçi Tipinizi Seçin</Text>
       <Text style={styles.stepDescription}>Size en uygun kategoriyi belirleyin</Text>
@@ -383,12 +892,12 @@ export default function OnboardingScreen() {
         <TouchableOpacity
           style={[
             styles.categoryCard,
-            data.category === 'individual' && styles.categoryCardActive,
+            ambassadorData.category === 'individual' && styles.categoryCardActiveAmbassador,
           ]}
-          onPress={() => setData({ ...data, category: 'individual', corporateType: null, companyName: '', taxNumber: '', taxOffice: '' })}
+          onPress={() => setAmbassadorData({ ...ambassadorData, category: 'individual', corporateType: null, companyName: '', taxNumber: '', taxOffice: '' })}
         >
-          <User size={32} color={data.category === 'individual' ? Colors.secondary : Colors.textSecondary} />
-          <Text style={[styles.categoryTitle, data.category === 'individual' && styles.categoryTitleActive]}>
+          <User size={32} color={ambassadorData.category === 'individual' ? '#8B5CF6' : Colors.textSecondary} />
+          <Text style={[styles.categoryTitle, ambassadorData.category === 'individual' && styles.categoryTitleActiveAmbassador]}>
             Bireysel
           </Text>
         </TouchableOpacity>
@@ -396,18 +905,18 @@ export default function OnboardingScreen() {
         <TouchableOpacity
           style={[
             styles.categoryCard,
-            data.category === 'corporate' && styles.categoryCardActive,
+            ambassadorData.category === 'corporate' && styles.categoryCardActiveAmbassador,
           ]}
-          onPress={() => setData({ ...data, category: 'corporate', individualType: null })}
+          onPress={() => setAmbassadorData({ ...ambassadorData, category: 'corporate', individualType: null })}
         >
-          <Building2 size={32} color={data.category === 'corporate' ? Colors.secondary : Colors.textSecondary} />
-          <Text style={[styles.categoryTitle, data.category === 'corporate' && styles.categoryTitleActive]}>
+          <Building2 size={32} color={ambassadorData.category === 'corporate' ? '#8B5CF6' : Colors.textSecondary} />
+          <Text style={[styles.categoryTitle, ambassadorData.category === 'corporate' && styles.categoryTitleActiveAmbassador]}>
             Kurumsal
           </Text>
         </TouchableOpacity>
       </View>
 
-      {data.category === 'individual' && (
+      {ambassadorData.category === 'individual' && (
         <View style={styles.subTypeContainer}>
           <Text style={styles.subTypeTitle}>Mesleğiniz</Text>
           <View style={styles.subTypeGrid}>
@@ -420,17 +929,17 @@ export default function OnboardingScreen() {
                 key={type.id}
                 style={[
                   styles.subTypeCard,
-                  data.individualType === type.id && styles.subTypeCardActive,
+                  ambassadorData.individualType === type.id && styles.subTypeCardActiveAmbassador,
                 ]}
-                onPress={() => setData({ ...data, individualType: type.id })}
+                onPress={() => setAmbassadorData({ ...ambassadorData, individualType: type.id })}
               >
                 <type.icon
                   size={24}
-                  color={data.individualType === type.id ? Colors.secondary : Colors.textSecondary}
+                  color={ambassadorData.individualType === type.id ? '#8B5CF6' : Colors.textSecondary}
                 />
                 <Text style={[
                   styles.subTypeLabel,
-                  data.individualType === type.id && styles.subTypeLabelActive,
+                  ambassadorData.individualType === type.id && styles.subTypeLabelActiveAmbassador,
                 ]}>
                   {type.label}
                 </Text>
@@ -440,7 +949,7 @@ export default function OnboardingScreen() {
         </View>
       )}
 
-      {data.category === 'corporate' && (
+      {ambassadorData.category === 'corporate' && (
         <View style={styles.subTypeContainer}>
           <Text style={styles.subTypeTitle}>Kurum Tipi</Text>
           <View style={styles.subTypeGrid}>
@@ -453,17 +962,17 @@ export default function OnboardingScreen() {
                 key={type.id}
                 style={[
                   styles.subTypeCard,
-                  data.corporateType === type.id && styles.subTypeCardActive,
+                  ambassadorData.corporateType === type.id && styles.subTypeCardActiveAmbassador,
                 ]}
-                onPress={() => setData({ ...data, corporateType: type.id })}
+                onPress={() => setAmbassadorData({ ...ambassadorData, corporateType: type.id })}
               >
                 <type.icon
                   size={24}
-                  color={data.corporateType === type.id ? Colors.secondary : Colors.textSecondary}
+                  color={ambassadorData.corporateType === type.id ? '#8B5CF6' : Colors.textSecondary}
                 />
                 <Text style={[
                   styles.subTypeLabel,
-                  data.corporateType === type.id && styles.subTypeLabelActive,
+                  ambassadorData.corporateType === type.id && styles.subTypeLabelActiveAmbassador,
                 ]}>
                   {type.label}
                 </Text>
@@ -474,13 +983,13 @@ export default function OnboardingScreen() {
           <View style={styles.corporateFields}>
             <View style={styles.inputContainer}>
               <View style={styles.inputLabelRow}>
-                <Building2 size={16} color={Colors.secondary} />
+                <Building2 size={16} color="#8B5CF6" />
                 <Text style={styles.inputLabel}>Şirket Adı *</Text>
               </View>
               <TextInput
                 style={styles.input}
-                value={data.companyName}
-                onChangeText={(text) => setData({ ...data, companyName: text })}
+                value={ambassadorData.companyName}
+                onChangeText={(text) => setAmbassadorData({ ...ambassadorData, companyName: text })}
                 placeholder="Şirket adını girin"
                 placeholderTextColor={Colors.textMuted}
               />
@@ -488,13 +997,13 @@ export default function OnboardingScreen() {
 
             <View style={styles.inputContainer}>
               <View style={styles.inputLabelRow}>
-                <CreditCard size={16} color={Colors.secondary} />
+                <CreditCard size={16} color="#8B5CF6" />
                 <Text style={styles.inputLabel}>Vergi No *</Text>
               </View>
               <TextInput
                 style={styles.input}
-                value={data.taxNumber}
-                onChangeText={(text) => setData({ ...data, taxNumber: text.replace(/[^0-9]/g, '').slice(0, 11) })}
+                value={ambassadorData.taxNumber}
+                onChangeText={(text) => setAmbassadorData({ ...ambassadorData, taxNumber: text.replace(/[^0-9]/g, '').slice(0, 11) })}
                 placeholder="Vergi numarasını girin"
                 placeholderTextColor={Colors.textMuted}
                 keyboardType="numeric"
@@ -504,13 +1013,13 @@ export default function OnboardingScreen() {
 
             <View style={styles.inputContainer}>
               <View style={styles.inputLabelRow}>
-                <MapPin size={16} color={Colors.secondary} />
+                <MapPin size={16} color="#8B5CF6" />
                 <Text style={styles.inputLabel}>Vergi Dairesi *</Text>
               </View>
               <TextInput
                 style={styles.input}
-                value={data.taxOffice}
-                onChangeText={(text) => setData({ ...data, taxOffice: text })}
+                value={ambassadorData.taxOffice}
+                onChangeText={(text) => setAmbassadorData({ ...ambassadorData, taxOffice: text })}
                 placeholder="Vergi dairesini girin"
                 placeholderTextColor={Colors.textMuted}
               />
@@ -523,77 +1032,121 @@ export default function OnboardingScreen() {
     </ScrollView>
   );
 
-  const renderStep5 = () => {
-    const allConsentsGiven = data.privacyConsent && data.kvkkConsent && data.termsConsent;
-    const showWarning = !allConsentsGiven;
+  const renderAmbassadorStep4 = () => {
+    const allConsentsGiven = ambassadorData.privacyConsent && ambassadorData.kvkkConsent && ambassadorData.termsConsent;
+    const passwordsMatch = ambassadorData.password === ambassadorData.confirmPassword;
+    const passwordValid = ambassadorData.password.length >= 6;
 
     return (
-      <View style={styles.stepContent}>
-        <Text style={styles.stepTitle}>Sözleşmeler</Text>
-        <Text style={styles.stepDescription}>
-          Devam etmek için aşağıdaki sözleşmeleri onaylamanız gerekmektedir
-        </Text>
+      <ScrollView style={styles.stepContent} showsVerticalScrollIndicator={false}>
+        <Text style={styles.stepTitle}>Şifre ve Sözleşmeler</Text>
+        <Text style={styles.stepDescription}>Hesabınızı güvence altına alın</Text>
+
+        <View style={styles.inputContainer}>
+          <View style={styles.inputLabelRow}>
+            <Lock size={16} color="#8B5CF6" />
+            <Text style={styles.inputLabel}>Şifre *</Text>
+          </View>
+          <TextInput
+            style={[styles.input, !passwordValid && ambassadorData.password.length > 0 && styles.inputError]}
+            value={ambassadorData.password}
+            onChangeText={(text) => setAmbassadorData({ ...ambassadorData, password: text })}
+            placeholder="En az 6 karakter"
+            placeholderTextColor={Colors.textMuted}
+            secureTextEntry
+          />
+          {!passwordValid && ambassadorData.password.length > 0 && (
+            <Text style={styles.errorText}>Şifre en az 6 karakter olmalıdır</Text>
+          )}
+        </View>
+
+        <View style={styles.inputContainer}>
+          <View style={styles.inputLabelRow}>
+            <Lock size={16} color="#8B5CF6" />
+            <Text style={styles.inputLabel}>Şifre Tekrar *</Text>
+          </View>
+          <TextInput
+            style={[styles.input, !passwordsMatch && ambassadorData.confirmPassword.length > 0 && styles.inputError]}
+            value={ambassadorData.confirmPassword}
+            onChangeText={(text) => setAmbassadorData({ ...ambassadorData, confirmPassword: text })}
+            placeholder="Şifrenizi tekrar girin"
+            placeholderTextColor={Colors.textMuted}
+            secureTextEntry
+          />
+          {!passwordsMatch && ambassadorData.confirmPassword.length > 0 && (
+            <Text style={styles.errorText}>Şifreler eşleşmiyor</Text>
+          )}
+        </View>
 
         <View style={styles.agreementsList}>
-          <View style={[styles.agreementItem, !data.privacyConsent && styles.agreementItemUnchecked]}>
+          <View style={[styles.agreementItem, !ambassadorData.privacyConsent && styles.agreementItemUnchecked]}>
             <TouchableOpacity
               style={styles.checkboxTouchable}
-              onPress={() => setData({ ...data, privacyConsent: !data.privacyConsent })}
+              onPress={() => setAmbassadorData({ ...ambassadorData, privacyConsent: !ambassadorData.privacyConsent })}
             >
-              <View style={[styles.checkbox, data.privacyConsent && styles.checkboxChecked]}>
-                {data.privacyConsent && <Check size={16} color={Colors.background} />}
+              <View style={[styles.checkbox, ambassadorData.privacyConsent && styles.checkboxCheckedAmbassador]}>
+                {ambassadorData.privacyConsent && <Check size={16} color={Colors.background} />}
               </View>
             </TouchableOpacity>
             <View style={styles.agreementContent}>
-              <Text style={styles.agreementTextWrapper}>
-                <TouchableOpacity onPress={() => Linking.openURL('https://www.compassabroad.com.tr/gizlilik-politikasi/')}>
-                  <Text style={styles.agreementLink}>Gizlilik Politikası</Text>
-                </TouchableOpacity>
+              <Text style={styles.agreementText}>
+                <Text
+                  style={styles.agreementLinkAmbassador}
+                  onPress={() => openLink('https://www.compassabroad.com.tr/gizlilik-politikasi/')}
+                >
+                  Gizlilik Politikası
+                </Text>
+                <Text style={styles.agreementLabel}>{"'nı okudum ve kabul ediyorum"}</Text>
               </Text>
-              <Text style={styles.agreementLabel}>{"'nı okudum ve kabul ediyorum"}</Text>
             </View>
           </View>
 
-          <View style={[styles.agreementItem, !data.kvkkConsent && styles.agreementItemUnchecked]}>
+          <View style={[styles.agreementItem, !ambassadorData.kvkkConsent && styles.agreementItemUnchecked]}>
             <TouchableOpacity
               style={styles.checkboxTouchable}
-              onPress={() => setData({ ...data, kvkkConsent: !data.kvkkConsent })}
+              onPress={() => setAmbassadorData({ ...ambassadorData, kvkkConsent: !ambassadorData.kvkkConsent })}
             >
-              <View style={[styles.checkbox, data.kvkkConsent && styles.checkboxChecked]}>
-                {data.kvkkConsent && <Check size={16} color={Colors.background} />}
+              <View style={[styles.checkbox, ambassadorData.kvkkConsent && styles.checkboxCheckedAmbassador]}>
+                {ambassadorData.kvkkConsent && <Check size={16} color={Colors.background} />}
               </View>
             </TouchableOpacity>
             <View style={styles.agreementContent}>
-              <Text style={styles.agreementTextWrapper}>
-                <TouchableOpacity onPress={() => Linking.openURL('https://www.compassabroad.com.tr/kvkk-aydinlatma-metni/')}>
-                  <Text style={styles.agreementLink}>KVKK Aydınlatma Metni</Text>
-                </TouchableOpacity>
+              <Text style={styles.agreementText}>
+                <Text
+                  style={styles.agreementLinkAmbassador}
+                  onPress={() => openLink('https://www.compassabroad.com.tr/kvkk-aydinlatma-metni/')}
+                >
+                  KVKK Aydınlatma Metni
+                </Text>
+                <Text style={styles.agreementLabel}>{"'ni okudum ve kabul ediyorum"}</Text>
               </Text>
-              <Text style={styles.agreementLabel}>{"'ni okudum ve kabul ediyorum"}</Text>
             </View>
           </View>
 
-          <View style={[styles.agreementItem, !data.termsConsent && styles.agreementItemUnchecked]}>
+          <View style={[styles.agreementItem, !ambassadorData.termsConsent && styles.agreementItemUnchecked]}>
             <TouchableOpacity
               style={styles.checkboxTouchable}
-              onPress={() => setData({ ...data, termsConsent: !data.termsConsent })}
+              onPress={() => setAmbassadorData({ ...ambassadorData, termsConsent: !ambassadorData.termsConsent })}
             >
-              <View style={[styles.checkbox, data.termsConsent && styles.checkboxChecked]}>
-                {data.termsConsent && <Check size={16} color={Colors.background} />}
+              <View style={[styles.checkbox, ambassadorData.termsConsent && styles.checkboxCheckedAmbassador]}>
+                {ambassadorData.termsConsent && <Check size={16} color={Colors.background} />}
               </View>
             </TouchableOpacity>
             <View style={styles.agreementContent}>
-              <Text style={styles.agreementTextWrapper}>
-                <TouchableOpacity onPress={() => Linking.openURL('https://www.compassabroad.com.tr/acik-riza-beyan-formu/')}>
-                  <Text style={styles.agreementLink}>Açık Rıza Beyanı</Text>
-                </TouchableOpacity>
+              <Text style={styles.agreementText}>
+                <Text
+                  style={styles.agreementLinkAmbassador}
+                  onPress={() => openLink('https://www.compassabroad.com.tr/acik-riza-beyan-formu/')}
+                >
+                  Açık Rıza Beyanı
+                </Text>
+                <Text style={styles.agreementLabel}>{"'nı okudum ve kabul ediyorum"}</Text>
               </Text>
-              <Text style={styles.agreementLabel}>{"'nı okudum ve kabul ediyorum"}</Text>
             </View>
           </View>
         </View>
 
-        {showWarning && (
+        {!allConsentsGiven && (
           <View style={styles.warningBox}>
             <Shield size={18} color={Colors.error} />
             <Text style={styles.warningText}>
@@ -602,79 +1155,75 @@ export default function OnboardingScreen() {
           </View>
         )}
 
-        <View style={styles.infoBox}>
-          <Shield size={20} color={Colors.info} />
-          <Text style={styles.infoText}>
-            Bilgileriniz KVKK kapsamında güvenle saklanmaktadır ve üçüncü taraflarla paylaşılmamaktadır.
-          </Text>
-        </View>
-      </View>
+        <View style={{ height: 40 }} />
+      </ScrollView>
     );
   };
 
-  const renderStep6 = () => (
-    <View style={styles.stepContent}>
-      <View style={styles.completedIcon}>
-        <View style={styles.completedIconCircle}>
-          <CheckCircle size={64} color={Colors.success} />
-        </View>
-      </View>
-      <Text style={styles.completedTitle}>Başvurunuz Alındı!</Text>
-      <Text style={styles.completedSubtitle}>
-        Hesabınız onay için inceleniyor. Onaylandığında bilgilendirileceksiniz.
-      </Text>
+  const getStudentSteps = () => ['Kişisel', 'Program', 'Şifre'];
+  const getAmbassadorSteps = () => ['Kişisel', 'Konum', 'Elçi Tipi', 'Sözleşme'];
 
-      <View style={styles.summaryCard}>
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Ad Soyad</Text>
-          <Text style={styles.summaryValue}>{data.firstName} {data.lastName}</Text>
-        </View>
-        <View style={styles.summaryDivider} />
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>E-posta</Text>
-          <Text style={styles.summaryValue}>{data.email}</Text>
-        </View>
-        <View style={styles.summaryDivider} />
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Şehir</Text>
-          <Text style={styles.summaryValue}>{data.city}</Text>
-        </View>
-        <View style={styles.summaryDivider} />
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Elçi Tipi</Text>
-          <Text style={styles.summaryValue}>
-            {data.category === 'individual' ? 'Bireysel' : 'Kurumsal'}
-            {data.individualType && ` (${data.individualType === 'student' ? 'Öğrenci' : data.individualType === 'teacher' ? 'Öğretmen' : 'Diğer'})`}
-            {data.corporateType && ` (${data.corporateType === 'school' ? 'Okul' : data.corporateType === 'agency' ? 'Acente' : 'Diğer'})`}
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.statusBadge}>
-        <Clock size={18} color={Colors.warning} />
-        <Text style={styles.statusText}>Onay Bekleniyor</Text>
-      </View>
-    </View>
-  );
-
-  const renderStepContent = () => {
-    switch (currentStep) {
-      case 1:
-        return renderStep1();
-      case 2:
-        return renderStep2();
-      case 3:
-        return renderStep3();
-      case 4:
-        return renderStep4();
-      case 5:
-        return renderStep5();
-      case 6:
-        return renderStep6();
-      default:
-        return null;
+  const renderContent = () => {
+    if (currentStep === 0) {
+      return renderTypeSelection();
     }
+
+    if (registrationType === 'student') {
+      switch (currentStep) {
+        case 1:
+          return renderStudentStep1();
+        case 2:
+          return renderStudentStep2();
+        case 3:
+          return renderStudentStep3();
+        default:
+          return null;
+      }
+    }
+
+    if (registrationType === 'ambassador') {
+      switch (currentStep) {
+        case 1:
+          return renderAmbassadorStep1();
+        case 2:
+          return renderAmbassadorStep2();
+        case 3:
+          return renderAmbassadorStep3();
+        case 4:
+          return renderAmbassadorStep4();
+        default:
+          return null;
+      }
+    }
+
+    return null;
   };
+
+  const canProceed = () => {
+    if (registrationType === 'student') {
+      return canProceedStudent();
+    }
+    if (registrationType === 'ambassador') {
+      return canProceedAmbassador();
+    }
+    return false;
+  };
+
+  const getMaxSteps = () => {
+    if (registrationType === 'student') return 3;
+    if (registrationType === 'ambassador') return 4;
+    return 0;
+  };
+
+  const getStepLabels = () => {
+    if (registrationType === 'student') return getStudentSteps();
+    if (registrationType === 'ambassador') return getAmbassadorSteps();
+    return [];
+  };
+
+  const gradientColors = registrationType === 'ambassador'
+    ? ['#4C1D95', '#6D28D9', Colors.background]
+    : [Colors.gradient.start, Colors.gradient.middle, Colors.background];
 
   return (
     <KeyboardAvoidingView
@@ -682,41 +1231,43 @@ export default function OnboardingScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <LinearGradient
-        colors={[Colors.gradient.start, Colors.gradient.middle, Colors.background]}
+        colors={gradientColors as [string, string, ...string[]]}
         style={[styles.gradient, { paddingTop: insets.top + 20 }]}
       >
-        <View style={styles.progressContainer}>
-          {STEPS.map((step, index) => (
-            <View key={step.id} style={styles.progressItem}>
-              <View
-                style={[
-                  styles.progressDot,
-                  currentStep >= step.id && styles.progressDotActive,
-                  currentStep === step.id && styles.progressDotCurrent,
-                ]}
-              >
-                {currentStep > step.id ? (
-                  <Check size={10} color={Colors.background} />
-                ) : (
-                  <Text style={[
-                    styles.progressNumber,
-                    currentStep >= step.id && styles.progressNumberActive,
-                  ]}>
-                    {step.id}
-                  </Text>
-                )}
-              </View>
-              {index < STEPS.length - 1 && (
+        {currentStep > 0 && (
+          <View style={styles.progressContainer}>
+            {getStepLabels().map((label, index) => (
+              <View key={index} style={styles.progressItem}>
                 <View
                   style={[
-                    styles.progressLine,
-                    currentStep > step.id && styles.progressLineActive,
+                    styles.progressDot,
+                    currentStep >= index + 1 && (registrationType === 'ambassador' ? styles.progressDotActiveAmbassador : styles.progressDotActive),
+                    currentStep === index + 1 && (registrationType === 'ambassador' ? styles.progressDotCurrentAmbassador : styles.progressDotCurrent),
                   ]}
-                />
-              )}
-            </View>
-          ))}
-        </View>
+                >
+                  {currentStep > index + 1 ? (
+                    <Check size={10} color={Colors.background} />
+                  ) : (
+                    <Text style={[
+                      styles.progressNumber,
+                      currentStep >= index + 1 && styles.progressNumberActive,
+                    ]}>
+                      {index + 1}
+                    </Text>
+                  )}
+                </View>
+                {index < getStepLabels().length - 1 && (
+                  <View
+                    style={[
+                      styles.progressLine,
+                      currentStep > index + 1 && (registrationType === 'ambassador' ? styles.progressLineActiveAmbassador : styles.progressLineActive),
+                    ]}
+                  />
+                )}
+              </View>
+            ))}
+          </View>
+        )}
 
         <Animated.View
           style={[
@@ -724,50 +1275,76 @@ export default function OnboardingScreen() {
             { transform: [{ translateX: slideAnim }] },
           ]}
         >
-          {renderStepContent()}
+          {renderContent()}
         </Animated.View>
 
-        <View style={[styles.footer, { paddingBottom: insets.bottom + 20 }]}>
-          <View style={styles.buttonRow}>
-            {currentStep > 1 && currentStep < 6 ? (
+        {currentStep > 0 && (
+          <View style={[styles.footer, { paddingBottom: insets.bottom + 20 }]}>
+            <View style={styles.buttonRow}>
               <TouchableOpacity style={styles.backButton} onPress={handleBack}>
                 <ChevronLeft size={20} color={Colors.text} />
                 <Text style={styles.backButtonText}>Geri</Text>
               </TouchableOpacity>
-            ) : (
-              <View style={styles.backButton} />
-            )}
 
-            {currentStep < 5 ? (
-              <TouchableOpacity
-                style={[styles.nextButton, !canProceed() && styles.nextButtonDisabled]}
-                onPress={handleNext}
-                disabled={!canProceed()}
-              >
-                <Text style={styles.nextButtonText}>İleri</Text>
-                <ChevronRight size={20} color={Colors.background} />
-              </TouchableOpacity>
-            ) : currentStep === 5 ? (
-              <TouchableOpacity
-                style={[styles.nextButton, !canProceed() && styles.nextButtonDisabled]}
-                onPress={handleNext}
-                disabled={!canProceed()}
-              >
-                <Text style={styles.nextButtonText}>Başvuruyu Tamamla</Text>
-                <Check size={20} color={Colors.background} />
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                style={styles.finishButton}
-                onPress={handleFinish}
-              >
-                <Text style={styles.finishButtonText}>Tamam</Text>
-                <Check size={20} color={Colors.background} />
-              </TouchableOpacity>
-            )}
+              {currentStep < getMaxSteps() ? (
+                <TouchableOpacity
+                  style={[
+                    registrationType === 'ambassador' ? styles.nextButtonAmbassador : styles.nextButton,
+                    !canProceed() && styles.nextButtonDisabled
+                  ]}
+                  onPress={handleNext}
+                  disabled={!canProceed()}
+                >
+                  <Text style={styles.nextButtonText}>İleri</Text>
+                  <ChevronRight size={20} color={Colors.background} />
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={[
+                    registrationType === 'ambassador' ? styles.nextButtonAmbassador : styles.nextButton,
+                    !canProceed() && styles.nextButtonDisabled
+                  ]}
+                  onPress={registrationType === 'student' ? handleStudentRegister : handleAmbassadorRegister}
+                  disabled={!canProceed()}
+                >
+                  <Text style={styles.nextButtonText}>Kayıt Ol</Text>
+                  <Check size={20} color={Colors.background} />
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        )}
+      </LinearGradient>
+
+      <Modal visible={showSuccessModal} animationType="fade" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalIconContainer}>
+              <CheckCircle size={64} color={Colors.success} />
+            </View>
+            <Text style={styles.modalTitle}>Başvurunuz Alınmıştır!</Text>
+            <Text style={styles.modalDescription}>
+              Başvurunuz incelemeye alınmıştır. En kısa zamanda sizinle iletişime geçilecektir.
+            </Text>
+            <Text style={styles.modalNote}>
+              Onay sonrası giriş yapabileceksiniz.
+            </Text>
+            <View style={styles.modalStatusBadge}>
+              <Clock size={18} color={Colors.warning} />
+              <Text style={styles.modalStatusText}>Onay Bekleniyor</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.modalButton}
+              onPress={() => {
+                setShowSuccessModal(false);
+                router.replace('/auth/pending-approval');
+              }}
+            >
+              <Text style={styles.modalButtonText}>Tamam</Text>
+            </TouchableOpacity>
           </View>
         </View>
-      </LinearGradient>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -805,9 +1382,17 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.secondary,
     borderColor: Colors.secondary,
   },
+  progressDotActiveAmbassador: {
+    backgroundColor: '#8B5CF6',
+    borderColor: '#8B5CF6',
+  },
   progressDotCurrent: {
     borderWidth: 3,
     borderColor: Colors.secondaryLight,
+  },
+  progressDotCurrentAmbassador: {
+    borderWidth: 3,
+    borderColor: '#A78BFA',
   },
   progressNumber: {
     fontSize: 10,
@@ -825,6 +1410,9 @@ const styles = StyleSheet.create({
   },
   progressLineActive: {
     backgroundColor: Colors.secondary,
+  },
+  progressLineActiveAmbassador: {
+    backgroundColor: '#8B5CF6',
   },
   contentContainer: {
     flex: 1,
@@ -851,31 +1439,44 @@ const styles = StyleSheet.create({
     marginBottom: 32,
     lineHeight: 24,
   },
-  featureList: {
+  typeSelectionContainer: {
     gap: 16,
   },
-  featureItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  typeCard: {
     backgroundColor: Colors.surface,
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    gap: 14,
+    borderRadius: 20,
+    padding: 24,
+    borderWidth: 2,
+    borderColor: Colors.secondary + '40',
+    position: 'relative',
   },
-  featureIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+  ambassadorCard: {
+    borderColor: '#8B5CF6' + '40',
+  },
+  typeIconContainer: {
+    width: 72,
+    height: 72,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 16,
   },
-  featureText: {
-    flex: 1,
-    fontSize: 15,
+  typeTitle: {
+    fontSize: 18,
+    fontWeight: '700' as const,
     color: Colors.text,
-    fontWeight: '500' as const,
+    marginBottom: 8,
+  },
+  typeDescription: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    lineHeight: 20,
+    paddingRight: 32,
+  },
+  typeArrow: {
+    position: 'absolute',
+    right: 20,
+    top: '50%',
   },
   stepTitle: {
     fontSize: 24,
@@ -952,7 +1553,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     borderWidth: 1,
     borderColor: Colors.border,
-    maxHeight: 300,
+    maxHeight: 200,
   },
   pickerOption: {
     flexDirection: 'row',
@@ -988,17 +1589,17 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     gap: 12,
   },
-  categoryCardActive: {
-    borderColor: Colors.secondary,
-    backgroundColor: Colors.secondary + '10',
+  categoryCardActiveAmbassador: {
+    borderColor: '#8B5CF6',
+    backgroundColor: '#8B5CF6' + '10',
   },
   categoryTitle: {
     fontSize: 16,
     fontWeight: '600' as const,
     color: Colors.textSecondary,
   },
-  categoryTitleActive: {
-    color: Colors.secondary,
+  categoryTitleActiveAmbassador: {
+    color: '#8B5CF6',
   },
   subTypeContainer: {
     marginTop: 8,
@@ -1023,31 +1624,32 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     gap: 8,
   },
-  subTypeCardActive: {
-    borderColor: Colors.secondary,
-    backgroundColor: Colors.secondary + '10',
+  subTypeCardActiveAmbassador: {
+    borderColor: '#8B5CF6',
+    backgroundColor: '#8B5CF6' + '10',
   },
   subTypeLabel: {
     fontSize: 13,
     fontWeight: '500' as const,
     color: Colors.textSecondary,
   },
-  subTypeLabelActive: {
-    color: Colors.secondary,
+  subTypeLabelActiveAmbassador: {
+    color: '#8B5CF6',
   },
   corporateFields: {
     marginTop: 20,
   },
   agreementsList: {
-    gap: 16,
-    marginBottom: 24,
+    gap: 12,
+    marginBottom: 16,
+    marginTop: 8,
   },
   agreementItem: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Colors.surface,
-    padding: 16,
-    borderRadius: 16,
+    padding: 14,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.border,
   },
@@ -1055,7 +1657,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.error + '50',
   },
   checkboxTouchable: {
-    marginRight: 14,
+    marginRight: 12,
   },
   checkbox: {
     width: 24,
@@ -1070,22 +1672,29 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.success,
     borderColor: Colors.success,
   },
+  checkboxCheckedAmbassador: {
+    backgroundColor: '#8B5CF6',
+    borderColor: '#8B5CF6',
+  },
   agreementContent: {
     flex: 1,
   },
+  agreementText: {
+    fontSize: 13,
+    color: Colors.text,
+    lineHeight: 20,
+  },
   agreementLabel: {
-    fontSize: 14,
     color: Colors.text,
   },
-  agreementTextWrapper: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-  },
   agreementLink: {
-    fontSize: 14,
     fontWeight: '600' as const,
     color: Colors.secondary,
+    textDecorationLine: 'underline',
+  },
+  agreementLinkAmbassador: {
+    fontWeight: '600' as const,
+    color: '#8B5CF6',
     textDecorationLine: 'underline',
   },
   warningBox: {
@@ -1102,91 +1711,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.error,
     lineHeight: 18,
-  },
-  infoBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: Colors.info + '15',
-    padding: 16,
-    borderRadius: 12,
-  },
-  infoText: {
-    flex: 1,
-    fontSize: 13,
-    color: Colors.info,
-    lineHeight: 20,
-  },
-  completedIcon: {
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  completedIconCircle: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: Colors.success + '20',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  completedTitle: {
-    fontSize: 28,
-    fontWeight: '700' as const,
-    color: Colors.text,
-    textAlign: 'center',
-    marginBottom: 12,
-  },
-  completedSubtitle: {
-    fontSize: 16,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-    marginBottom: 32,
-    lineHeight: 24,
-    paddingHorizontal: 20,
-  },
-  summaryCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: 16,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    marginBottom: 20,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  summaryLabel: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-  },
-  summaryValue: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: Colors.text,
-  },
-  summaryDivider: {
-    height: 1,
-    backgroundColor: Colors.border,
-    marginVertical: 4,
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    backgroundColor: Colors.warning + '20',
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-    borderRadius: 12,
-    alignSelf: 'center',
-  },
-  statusText: {
-    fontSize: 16,
-    fontWeight: '600' as const,
-    color: Colors.warning,
   },
   footer: {
     paddingHorizontal: 20,
@@ -1217,6 +1741,15 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 12,
   },
+  nextButtonAmbassador: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#8B5CF6',
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 12,
+  },
   nextButtonDisabled: {
     opacity: 0.5,
   },
@@ -1225,18 +1758,77 @@ const styles = StyleSheet.create({
     fontWeight: '600' as const,
     color: Colors.background,
   },
-  finishButton: {
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  modalContent: {
+    backgroundColor: Colors.surface,
+    borderRadius: 24,
+    padding: 32,
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: 360,
+  },
+  modalIconContainer: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: Colors.success + '20',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 24,
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: '700' as const,
+    color: Colors.text,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  modalDescription: {
+    fontSize: 15,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 8,
+  },
+  modalNote: {
+    fontSize: 14,
+    color: Colors.info,
+    textAlign: 'center',
+    marginBottom: 20,
+    fontWeight: '500' as const,
+  },
+  modalStatusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: Colors.success,
-    paddingHorizontal: 24,
+    backgroundColor: Colors.warning + '20',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    marginBottom: 24,
+  },
+  modalStatusText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: Colors.warning,
+  },
+  modalButton: {
+    backgroundColor: '#8B5CF6',
+    paddingHorizontal: 48,
     paddingVertical: 14,
     borderRadius: 12,
+    width: '100%',
+    alignItems: 'center',
   },
-  finishButtonText: {
+  modalButtonText: {
     fontSize: 16,
     fontWeight: '600' as const,
-    color: Colors.background,
+    color: '#FFFFFF',
   },
 });
