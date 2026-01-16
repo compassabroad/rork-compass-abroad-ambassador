@@ -28,6 +28,7 @@ import {
   Twitter,
   Facebook,
   RefreshCw,
+  UserPlus2,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 
@@ -325,7 +326,17 @@ export default function DashboardScreen() {
           <View style={[styles.quickActionIcon, { backgroundColor: Colors.secondary + '30' }]}>
             <UserPlus size={20} color={Colors.secondary} />
           </View>
-          <Text style={styles.quickActionText}>Öğrenci Davet</Text>
+          <Text style={styles.quickActionText}>Davet Et</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={styles.quickActionButton} 
+          onPress={() => setShowStudentModal(true)}
+        >
+          <View style={[styles.quickActionIcon, { backgroundColor: Colors.info + '30' }]}>
+            <UserPlus2 size={20} color={Colors.info} />
+          </View>
+          <Text style={styles.quickActionText}>Manuel Ekle</Text>
         </TouchableOpacity>
         
         <TouchableOpacity 
@@ -693,19 +704,19 @@ const styles = StyleSheet.create({
   },
   quickActionButton: {
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: 10,
     paddingVertical: 8,
   },
   quickActionIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 6,
   },
   quickActionText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     color: Colors.text,
   },
