@@ -22,6 +22,8 @@ import {
   ChevronRight,
   Settings,
   Share2,
+  UserCog,
+  ArrowRight,
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -32,12 +34,14 @@ import {
   getAllAmbassadors,
   MOCK_STUDENTS,
   MOCK_EARNINGS,
+  MOCK_NAME_CHANGE_REQUESTS,
 } from '@/mocks/data';
-import { PendingAmbassador, Ambassador, AMBASSADOR_TYPE_LABELS } from '@/types';
+import { PendingAmbassador, Ambassador, AMBASSADOR_TYPE_LABELS, NameChangeRequest } from '@/types';
 
 export default function AdminScreen() {
   const router = useRouter();
   const [pendingAmbassadors, setPendingAmbassadors] = useState<PendingAmbassador[]>(MOCK_PENDING_AMBASSADORS);
+  const [nameChangeRequests, setNameChangeRequests] = useState<NameChangeRequest[]>(MOCK_NAME_CHANGE_REQUESTS);
   const [searchQuery, setSearchQuery] = useState('');
   const allAmbassadors = getAllAmbassadors();
 
@@ -89,6 +93,47 @@ export default function AdminScreen() {
     );
   }, []);
 
+  const handleApproveNameChange = useCallback((request: NameChangeRequest) => {
+    Alert.alert(
+      'İsim Değişikliğini Onayla',
+      `"${request.currentFirstName} ${request.currentLastName}" → "${request.requestedFirstName} ${request.requestedLastName}" olarak değiştirilsin mi?`,
+      [
+        { text: 'İptal', style: 'cancel' },
+        {
+          text: 'Onayla',
+          onPress: () => {
+            setNameChangeRequests(prev =>
+              prev.map(r => (r.id === request.id ? { ...r, status: 'approved' as const } : r))
+            );
+            console.log('Name change approved:', request);
+            Alert.alert('Başarılı', 'İsim değişikliği onaylandı.');
+          },
+        },
+      ]
+    );
+  }, []);
+
+  const handleRejectNameChange = useCallback((request: NameChangeRequest) => {
+    Alert.alert(
+      'İsim Değişikliğini Reddet',
+      'Bu isim değişikliği talebini reddetmek istediğinize emin misiniz?',
+      [
+        { text: 'İptal', style: 'cancel' },
+        {
+          text: 'Reddet',
+          style: 'destructive',
+          onPress: () => {
+            setNameChangeRequests(prev =>
+              prev.map(r => (r.id === request.id ? { ...r, status: 'rejected' as const } : r))
+            );
+            console.log('Name change rejected:', request);
+            Alert.alert('Reddedildi', 'İsim değişikliği talebi reddedildi.');
+          },
+        },
+      ]
+    );
+  }, []);
+
   const filteredAmbassadors = allAmbassadors.filter(
     a =>
       a.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -97,6 +142,7 @@ export default function AdminScreen() {
   );
 
   const pendingList = pendingAmbassadors.filter(a => a.status === 'pending');
+  const pendingNameChanges = nameChangeRequests.filter(r => r.status === 'pending');
 
   if (!isAdmin) {
     return (
@@ -305,6 +351,55 @@ export default function AdminScreen() {
           </View>
           <ChevronRight color={Colors.textMuted} size={24} />
         </TouchableOpacity>
+
+        {pendingNameChanges.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>İsim Değişikliği Talepleri</Text>
+              <View style={[styles.pendingBadge, { backgroundColor: Colors.info }]}>
+                <Text style={styles.pendingBadgeText}>{pendingNameChanges.length}</Text>
+              </View>
+            </View>
+            {pendingNameChanges.map((request) => (
+              <View key={request.id} style={styles.nameChangeCard}>
+                <View style={styles.nameChangeInfo}>
+                  <View style={styles.nameChangeAvatar}>
+                    <UserCog size={20} color={Colors.info} />
+                  </View>
+                  <View style={styles.nameChangeDetails}>
+                    <Text style={styles.nameChangeAmbassador}>{request.ambassadorName}</Text>
+                    <View style={styles.nameChangeNames}>
+                      <Text style={styles.nameChangeCurrent}>
+                        {request.currentFirstName} {request.currentLastName}
+                      </Text>
+                      <ArrowRight size={14} color={Colors.textMuted} />
+                      <Text style={styles.nameChangeRequested}>
+                        {request.requestedFirstName} {request.requestedLastName}
+                      </Text>
+                    </View>
+                    <Text style={styles.nameChangeDate}>
+                      Talep: {formatDate(request.requestDate)}
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.nameChangeActions}>
+                  <TouchableOpacity
+                    style={[styles.actionButton, styles.approveButton]}
+                    onPress={() => handleApproveNameChange(request)}
+                  >
+                    <Check color="#FFFFFF" size={20} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.actionButton, styles.rejectButton]}
+                    onPress={() => handleRejectNameChange(request)}
+                  >
+                    <X color="#FFFFFF" size={20} />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
 
         {pendingList.length > 0 && (
           <View style={styles.section}>
@@ -635,5 +730,63 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: Colors.textSecondary,
     textAlign: 'center',
+  },
+  nameChangeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: Colors.surface,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: Colors.info + '30',
+  },
+  nameChangeInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  nameChangeAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: Colors.info + '20',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+  },
+  nameChangeDetails: {
+    flex: 1,
+  },
+  nameChangeAmbassador: {
+    fontSize: 15,
+    fontWeight: '600' as const,
+    color: Colors.text,
+    marginBottom: 6,
+  },
+  nameChangeNames: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+    flexWrap: 'wrap',
+  },
+  nameChangeCurrent: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+  },
+  nameChangeRequested: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: Colors.info,
+  },
+  nameChangeDate: {
+    fontSize: 12,
+    color: Colors.textMuted,
+  },
+  nameChangeActions: {
+    flexDirection: 'row',
+    gap: 10,
   },
 });

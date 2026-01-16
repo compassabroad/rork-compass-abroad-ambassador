@@ -50,10 +50,17 @@ export interface Program {
 
 export type AmbassadorType = 'bronze' | 'silver' | 'gold' | 'platinum' | 'diamond';
 
+export type AmbassadorCategory = 'individual' | 'corporate';
+export type IndividualSubType = 'student' | 'teacher' | 'other';
+export type CorporateSubType = 'school' | 'agency' | 'other';
+export type AccountStatus = 'pending_approval' | 'active' | 'rejected' | 'suspended';
+
 export interface Ambassador {
   id: string;
   referralCode: string;
   name: string;
+  firstName: string;
+  lastName: string;
   email: string;
   phone: string;
   type: AmbassadorType;
@@ -69,6 +76,22 @@ export interface Ambassador {
   savedIbans?: SavedIban[];
   kvkkConsent: boolean;
   kvkkConsentDate?: string;
+  birthDate?: string;
+  tcIdentity?: string;
+  city?: string;
+  ambassadorCategory: AmbassadorCategory;
+  ambassadorSubType: IndividualSubType | CorporateSubType;
+  companyName?: string;
+  taxNumber?: string;
+  taxOffice?: string;
+  accountStatus: AccountStatus;
+  pendingFirstName?: string | null;
+  pendingLastName?: string | null;
+  nameChangeRequestDate?: string | null;
+  privacyPolicyConsent: boolean;
+  privacyPolicyConsentDate?: string;
+  termsConsent: boolean;
+  termsConsentDate?: string;
 }
 
 export interface Earnings {
@@ -263,3 +286,26 @@ export interface SavedIban {
   submittedAt?: string;
   approvedAt?: string;
 }
+
+export interface NameChangeRequest {
+  id: string;
+  ambassadorId: string;
+  ambassadorName: string;
+  currentFirstName: string;
+  currentLastName: string;
+  requestedFirstName: string;
+  requestedLastName: string;
+  requestDate: string;
+  status: 'pending' | 'approved' | 'rejected';
+}
+
+export const TURKISH_CITIES = [
+  'Adana', 'Adıyaman', 'Afyonkarahisar', 'Ağrı', 'Aksaray', 'Amasya', 'Ankara', 'Antalya', 'Ardahan', 'Artvin',
+  'Aydın', 'Balıkesir', 'Bartın', 'Batman', 'Bayburt', 'Bilecik', 'Bingöl', 'Bitlis', 'Bolu', 'Burdur',
+  'Bursa', 'Çanakkale', 'Çankırı', 'Çorum', 'Denizli', 'Diyarbakır', 'Düzce', 'Edirne', 'Elazığ', 'Erzincan',
+  'Erzurum', 'Eskişehir', 'Gaziantep', 'Giresun', 'Gümüşhane', 'Hakkari', 'Hatay', 'Iğdır', 'Isparta', 'İstanbul',
+  'İzmir', 'Kahramanmaraş', 'Karabük', 'Karaman', 'Kars', 'Kastamonu', 'Kayseri', 'Kırıkkale', 'Kırklareli', 'Kırşehir',
+  'Kilis', 'Kocaeli', 'Konya', 'Kütahya', 'Malatya', 'Manisa', 'Mardin', 'Mersin', 'Muğla', 'Muş',
+  'Nevşehir', 'Niğde', 'Ordu', 'Osmaniye', 'Rize', 'Sakarya', 'Samsun', 'Siirt', 'Sinop', 'Sivas',
+  'Şanlıurfa', 'Şırnak', 'Tekirdağ', 'Tokat', 'Trabzon', 'Tunceli', 'Uşak', 'Van', 'Yalova', 'Yozgat', 'Zonguldak'
+] as const;

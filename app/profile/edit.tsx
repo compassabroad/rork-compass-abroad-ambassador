@@ -6,46 +6,35 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  Switch,
   Alert,
   Platform,
-  Image,
-  Share,
   Modal,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import {
-  Copy,
-  Award,
+  User,
+  Mail,
+  Phone,
+  Calendar,
   CreditCard,
-  Shield,
-  ChevronRight,
-  Check,
-  LogOut,
-  Bell,
-  Globe,
-  Share2,
-  Download,
-  Plus,
+  MapPin,
+  Camera,
   Building2,
   ChevronDown,
+  Check,
   X,
+  Trash2,
+  Star,
+  Plus,
+  AlertCircle,
   Clock,
   CheckCircle,
-  AlertCircle,
-  Star,
-  Trash2,
-  Edit3,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 
 import Colors from '@/constants/colors';
 import { MOCK_CURRENT_AMBASSADOR } from '@/mocks/data';
-import { useRouter } from 'expo-router';
-import { AMBASSADOR_TYPE_LABELS, AmbassadorType, SavedIban, BankAccountStatus } from '@/types';
-
-const AMBASSADOR_TYPES: AmbassadorType[] = ['bronze', 'silver', 'gold', 'platinum', 'diamond'];
+import { TURKISH_CITIES, SavedIban, BankAccountStatus } from '@/types';
 
 const BANKS = [
   'Ziraat Bankası',
@@ -68,68 +57,52 @@ const STATUS_CONFIG: Record<BankAccountStatus, { label: string; color: string; i
   rejected: { label: 'Reddedildi', color: '#EF4444', icon: AlertCircle },
 };
 
-export default function ProfileScreen() {
-  const insets = useSafeAreaInsets();
+export default function ProfileEditScreen() {
   const router = useRouter();
+  const [firstName] = useState(MOCK_CURRENT_AMBASSADOR.firstName);
+  const [lastName] = useState(MOCK_CURRENT_AMBASSADOR.lastName);
+  const [email, setEmail] = useState(MOCK_CURRENT_AMBASSADOR.email);
+  const [phone, setPhone] = useState(MOCK_CURRENT_AMBASSADOR.phone);
+  const [birthDate, setBirthDate] = useState(MOCK_CURRENT_AMBASSADOR.birthDate || '');
+  const [city, setCity] = useState(MOCK_CURRENT_AMBASSADOR.city || '');
   const [savedIbans, setSavedIbans] = useState<SavedIban[]>(MOCK_CURRENT_AMBASSADOR.savedIbans || []);
-  const [kvkkConsent, setKvkkConsent] = useState(MOCK_CURRENT_AMBASSADOR.kvkkConsent);
-  const [notifications, setNotifications] = useState(true);
-  const [language, setLanguage] = useState<'tr' | 'en'>('tr');
   
+  const [showCityPicker, setShowCityPicker] = useState(false);
   const [showAddBankModal, setShowAddBankModal] = useState(false);
-  const [newIban, setNewIban] = useState('');
+  const [showNameChangeModal, setShowNameChangeModal] = useState(false);
   const [newBankName, setNewBankName] = useState('');
+  const [newIban, setNewIban] = useState('');
   const [showBankPicker, setShowBankPicker] = useState(false);
   const [ibanError, setIbanError] = useState('');
 
-  const referralLink = `https://compassabroad.com/ref/${MOCK_CURRENT_AMBASSADOR.referralCode}`;
-  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(referralLink)}&bgcolor=FFFFFF&color=502274`;
+  const [pendingFirstName, setPendingFirstName] = useState(firstName);
+  const [pendingLastName, setPendingLastName] = useState(lastName);
 
-  const copyReferralCode = async () => {
-    if (Platform.OS !== 'web') {
-      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  const originalFirstName = MOCK_CURRENT_AMBASSADOR.firstName;
+  const originalLastName = MOCK_CURRENT_AMBASSADOR.lastName;
+  const tcIdentity = MOCK_CURRENT_AMBASSADOR.tcIdentity || '';
+
+  
+
+  const formatPhone = (text: string): string => {
+    let cleaned = text.replace(/[^\d+]/g, '');
+    if (!cleaned.startsWith('+90') && cleaned.length > 0) {
+      if (cleaned.startsWith('90')) {
+        cleaned = '+' + cleaned;
+      } else if (cleaned.startsWith('0')) {
+        cleaned = '+9' + cleaned;
+      } else if (!cleaned.startsWith('+')) {
+        cleaned = '+90' + cleaned;
+      }
     }
-    Alert.alert('Kopyalandı!', `Referans kodu: ${MOCK_CURRENT_AMBASSADOR.referralCode}`);
+    return cleaned.slice(0, 13);
   };
 
-  const shareQRCode = async () => {
-    if (Platform.OS !== 'web') {
-      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    }
-    try {
-      await Share.share({
-        message: `Compass Abroad'a katıl! Referans linkim: ${referralLink}`,
-        url: referralLink,
-      });
-    } catch (error) {
-      console.log('Share error:', error);
-    }
-  };
-
-  const downloadQRCode = async () => {
-    if (Platform.OS !== 'web') {
-      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    }
-    Alert.alert(
-      'QR Kodu İndir',
-      'QR kodunuz galeriye kaydedildi.',
-      [{ text: 'Tamam' }]
-    );
-  };
-
-  const handleKvkkToggle = (value: boolean) => {
-    if (!value) {
-      Alert.alert(
-        'KVKK Onayı',
-        'KVKK onayını geri çekerseniz bazı özellikler kısıtlanabilir. Devam etmek istiyor musunuz?',
-        [
-          { text: 'İptal', style: 'cancel' },
-          { text: 'Devam', onPress: () => setKvkkConsent(false) },
-        ]
-      );
-    } else {
-      setKvkkConsent(true);
-    }
+  const formatDate = (text: string): string => {
+    const cleaned = text.replace(/[^\d]/g, '');
+    if (cleaned.length <= 2) return cleaned;
+    if (cleaned.length <= 4) return `${cleaned.slice(0, 2)}/${cleaned.slice(2)}`;
+    return `${cleaned.slice(0, 2)}/${cleaned.slice(2, 4)}/${cleaned.slice(4, 8)}`;
   };
 
   const formatIbanDisplay = (iban: string) => {
@@ -139,7 +112,6 @@ export default function ProfileScreen() {
 
   const formatIbanInput = (text: string) => {
     let cleaned = text.toUpperCase().replace(/[^A-Z0-9]/g, '');
-    
     if (cleaned.length > 0 && !cleaned.startsWith('TR')) {
       if (cleaned.startsWith('T')) {
         cleaned = 'T' + cleaned.slice(1);
@@ -147,33 +119,27 @@ export default function ProfileScreen() {
         cleaned = 'TR' + cleaned;
       }
     }
-    
     if (cleaned.length > 26) {
       cleaned = cleaned.slice(0, 26);
     }
-    
     return cleaned;
   };
 
   const validateIban = (iban: string): boolean => {
     const cleaned = iban.replace(/\s/g, '');
-    
     if (cleaned.length !== 26) {
       setIbanError('IBAN 26 karakter olmalıdır');
       return false;
     }
-    
     if (!cleaned.startsWith('TR')) {
       setIbanError('IBAN "TR" ile başlamalıdır');
       return false;
     }
-    
     const afterTR = cleaned.slice(2);
     if (!/^\d+$/.test(afterTR)) {
       setIbanError('TR sonrası sadece rakam olmalıdır');
       return false;
     }
-    
     setIbanError('');
     return true;
   };
@@ -181,7 +147,6 @@ export default function ProfileScreen() {
   const handleIbanChange = (text: string) => {
     const formatted = formatIbanInput(text);
     setNewIban(formatted);
-    
     if (formatted.length === 26) {
       validateIban(formatted);
     } else {
@@ -201,11 +166,9 @@ export default function ProfileScreen() {
       Alert.alert('Hata', 'Lütfen bir banka seçin');
       return;
     }
-
     if (!validateIban(newIban)) {
       return;
     }
-
     const existingBank = savedIbans.find(
       i => i.iban === newIban || (i.bankName === newBankName && i.status !== 'rejected')
     );
@@ -213,9 +176,7 @@ export default function ProfileScreen() {
       Alert.alert('Hata', 'Bu banka veya IBAN zaten kayıtlı');
       return;
     }
-
     const isFirstAccount = savedIbans.filter(i => i.status === 'approved').length === 0;
-
     const newAccount: SavedIban = {
       id: Date.now().toString(),
       iban: newIban,
@@ -224,18 +185,15 @@ export default function ProfileScreen() {
       status: 'pending',
       submittedAt: new Date().toISOString().split('T')[0],
     };
-
     setSavedIbans([...savedIbans, newAccount]);
     setShowAddBankModal(false);
     resetAddBankForm();
-
     if (Platform.OS !== 'web') {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
-
     Alert.alert(
       'Banka Hesabı Eklendi',
-      'Banka hesabınız Compass Abroad admin onayına gönderildi. Onaylandığında bildirim alacaksınız.',
+      'Banka hesabınız Compass Abroad admin onayına gönderildi.',
       [{ text: 'Tamam' }]
     );
   };
@@ -246,12 +204,10 @@ export default function ProfileScreen() {
       Alert.alert('Hata', 'Sadece onaylanmış hesaplar varsayılan olarak ayarlanabilir');
       return;
     }
-
     setSavedIbans(savedIbans.map(iban => ({
       ...iban,
       isDefault: iban.id === ibanId,
     })));
-
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
@@ -263,7 +219,6 @@ export default function ProfileScreen() {
       Alert.alert('Hata', 'Varsayılan hesap silinemez. Önce başka bir hesabı varsayılan yapın.');
       return;
     }
-
     Alert.alert(
       'Hesabı Sil',
       'Bu banka hesabını silmek istediğinizden emin misiniz?',
@@ -283,158 +238,236 @@ export default function ProfileScreen() {
     );
   };
 
-  const typeInfo = AMBASSADOR_TYPE_LABELS[MOCK_CURRENT_AMBASSADOR.type];
-  const pendingAccounts = savedIbans.filter(i => i.status === 'pending');
+  const handleNameChange = () => {
+    if (pendingFirstName === originalFirstName && pendingLastName === originalLastName) {
+      Alert.alert('Uyarı', 'İsim değişikliği yapmadınız.');
+      return;
+    }
+    setShowNameChangeModal(true);
+  };
+
+  const submitNameChangeRequest = () => {
+    setShowNameChangeModal(false);
+    if (Platform.OS !== 'web') {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+    Alert.alert(
+      'Talep Oluşturuldu',
+      `İsim değişikliği talebiniz admin onayına gönderildi.\n\nMevcut: ${originalFirstName} ${originalLastName}\nTalep Edilen: ${pendingFirstName} ${pendingLastName}`,
+      [{ text: 'Tamam' }]
+    );
+    console.log('Name change request submitted:', {
+      currentFirstName: originalFirstName,
+      currentLastName: originalLastName,
+      requestedFirstName: pendingFirstName,
+      requestedLastName: pendingLastName,
+    });
+  };
+
+  const handleSave = async () => {
+    if (Platform.OS !== 'web') {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+    console.log('Profile saved:', {
+      firstName,
+      lastName,
+      email,
+      phone,
+      birthDate,
+      city,
+      savedIbans,
+    });
+    Alert.alert('Başarılı', 'Profil bilgileriniz güncellendi.', [
+      { text: 'Tamam', onPress: () => router.back() }
+    ]);
+  };
 
   return (
     <View style={styles.container}>
-      <LinearGradient
-        colors={[Colors.gradient.middle, Colors.background]}
-        style={[styles.header, { paddingTop: insets.top + 16 }]}
-      >
-        <View style={styles.profileHeader}>
-          <View style={[styles.avatar, { borderColor: typeInfo.color }]}>
-            <Text style={styles.avatarText}>
-              {MOCK_CURRENT_AMBASSADOR.name.split(' ').map(n => n[0]).join('')}
-            </Text>
-            <View style={[styles.typeBadgeSmall, { backgroundColor: typeInfo.color }]}>
-              <Award size={12} color={Colors.background} />
-            </View>
-          </View>
-          <View style={styles.profileInfo}>
-            <View style={styles.profileNameRow}>
-              <Text style={styles.profileName}>{MOCK_CURRENT_AMBASSADOR.name}</Text>
-              <TouchableOpacity
-                style={styles.editButton}
-                onPress={() => router.push('/profile/edit')}
-              >
-                <Edit3 size={16} color={Colors.secondary} />
-              </TouchableOpacity>
-            </View>
-            {MOCK_CURRENT_AMBASSADOR.pendingFirstName && (
-              <View style={styles.pendingNameBadge}>
-                <Clock size={12} color={Colors.warning} />
-                <Text style={styles.pendingNameText}>
-                  İsim değişikliği bekliyor: {MOCK_CURRENT_AMBASSADOR.pendingFirstName} {MOCK_CURRENT_AMBASSADOR.pendingLastName}
-                </Text>
-              </View>
-            )}
-            <Text style={styles.profileEmail}>{MOCK_CURRENT_AMBASSADOR.email}</Text>
-            <View style={[styles.typeBadge, { backgroundColor: typeInfo.color + '20' }]}>
-              <Text style={[styles.typeBadgeText, { color: typeInfo.color }]}>
-                {typeInfo.tr} Elçi
-              </Text>
-            </View>
-          </View>
-        </View>
-      </LinearGradient>
-
       <ScrollView
         style={styles.content}
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.qrSection}>
-          <View style={styles.qrContainer}>
-            <View style={styles.qrImageContainer}>
-              <Image
-                source={{ uri: qrCodeUrl }}
-                style={styles.qrImage}
-                resizeMode="contain"
-              />
+        <View style={styles.avatarSection}>
+          <View style={styles.avatarContainer}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>
+                {firstName[0]}{lastName[0]}
+              </Text>
             </View>
-            <Text style={styles.referralCode}>{MOCK_CURRENT_AMBASSADOR.referralCode}</Text>
-            <Text style={styles.referralLink}>{referralLink}</Text>
-            <View style={styles.qrButtons}>
-              <TouchableOpacity style={styles.qrButton} onPress={copyReferralCode}>
-                <Copy size={18} color={Colors.text} />
-                <Text style={styles.qrButtonText}>Kopyala</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.qrButton} onPress={shareQRCode}>
-                <Share2 size={18} color={Colors.text} />
-                <Text style={styles.qrButtonText}>Paylaş</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.qrButton} onPress={downloadQRCode}>
-                <Download size={18} color={Colors.text} />
-                <Text style={styles.qrButtonText}>İndir</Text>
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity style={styles.cameraButton}>
+              <Camera size={18} color={Colors.background} />
+            </TouchableOpacity>
           </View>
-          <Text style={styles.qrHint}>
-            Bu QR kodu paylaşarak yeni öğrenci ve elçi kazanabilirsiniz
-          </Text>
+          <Text style={styles.changePhotoText}>Fotoğraf Değiştir</Text>
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Elçi Seviyesi</Text>
-          <View style={styles.tierContainer}>
-            {AMBASSADOR_TYPES.map((type, index) => {
-              const info = AMBASSADOR_TYPE_LABELS[type];
-              const isActive = type === MOCK_CURRENT_AMBASSADOR.type;
-              const isPast = AMBASSADOR_TYPES.indexOf(MOCK_CURRENT_AMBASSADOR.type) > index;
-              
-              return (
-                <View key={type} style={styles.tierItem}>
-                  <View
-                    style={[
-                      styles.tierDot,
-                      { backgroundColor: isPast || isActive ? info.color : Colors.border },
-                      isActive && styles.tierDotActive,
-                    ]}
-                  >
-                    {(isPast || isActive) && <Check size={10} color={Colors.background} />}
-                  </View>
-                  <Text
-                    style={[
-                      styles.tierLabel,
-                      (isPast || isActive) && { color: Colors.text },
-                    ]}
-                  >
-                    {info.tr}
-                  </Text>
-                  {index < AMBASSADOR_TYPES.length - 1 && (
-                    <View
-                      style={[
-                        styles.tierLine,
-                        isPast && { backgroundColor: info.color },
-                      ]}
-                    />
-                  )}
-                </View>
-              );
-            })}
+          <Text style={styles.sectionTitle}>Kişisel Bilgiler</Text>
+
+          <View style={styles.inputRow}>
+            <View style={[styles.inputContainer, { flex: 1, marginRight: 8 }]}>
+              <View style={styles.inputLabelRow}>
+                <User size={16} color={Colors.secondary} />
+                <Text style={styles.inputLabel}>Ad</Text>
+              </View>
+              <TextInput
+                style={styles.input}
+                value={pendingFirstName}
+                onChangeText={setPendingFirstName}
+                placeholder="Adınız"
+                placeholderTextColor={Colors.textMuted}
+              />
+            </View>
+            <View style={[styles.inputContainer, { flex: 1, marginLeft: 8 }]}>
+              <View style={styles.inputLabelRow}>
+                <User size={16} color={Colors.secondary} />
+                <Text style={styles.inputLabel}>Soyad</Text>
+              </View>
+              <TextInput
+                style={styles.input}
+                value={pendingLastName}
+                onChangeText={setPendingLastName}
+                placeholder="Soyadınız"
+                placeholderTextColor={Colors.textMuted}
+              />
+            </View>
           </View>
+
+          {(pendingFirstName !== originalFirstName || pendingLastName !== originalLastName) && (
+            <TouchableOpacity style={styles.nameChangeButton} onPress={handleNameChange}>
+              <AlertCircle size={16} color={Colors.warning} />
+              <Text style={styles.nameChangeButtonText}>İsim değişikliği için onay talep et</Text>
+            </TouchableOpacity>
+          )}
+
+          {MOCK_CURRENT_AMBASSADOR.pendingFirstName && (
+            <View style={styles.pendingNameBanner}>
+              <Clock size={16} color={Colors.warning} />
+              <Text style={styles.pendingNameText}>
+                İsim değişikliği onay bekliyor: {MOCK_CURRENT_AMBASSADOR.pendingFirstName} {MOCK_CURRENT_AMBASSADOR.pendingLastName}
+              </Text>
+            </View>
+          )}
+
+          <View style={styles.inputContainer}>
+            <View style={styles.inputLabelRow}>
+              <Mail size={16} color={Colors.secondary} />
+              <Text style={styles.inputLabel}>E-posta</Text>
+            </View>
+            <TextInput
+              style={styles.input}
+              value={email}
+              onChangeText={setEmail}
+              placeholder="E-posta adresiniz"
+              placeholderTextColor={Colors.textMuted}
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+          </View>
+
+          <View style={styles.inputContainer}>
+            <View style={styles.inputLabelRow}>
+              <Phone size={16} color={Colors.secondary} />
+              <Text style={styles.inputLabel}>Telefon</Text>
+            </View>
+            <TextInput
+              style={styles.input}
+              value={phone}
+              onChangeText={(text) => setPhone(formatPhone(text))}
+              placeholder="+90 5XX XXX XX XX"
+              placeholderTextColor={Colors.textMuted}
+              keyboardType="phone-pad"
+            />
+          </View>
+
+          <View style={styles.inputContainer}>
+            <View style={styles.inputLabelRow}>
+              <Calendar size={16} color={Colors.secondary} />
+              <Text style={styles.inputLabel}>Doğum Tarihi</Text>
+            </View>
+            <TextInput
+              style={styles.input}
+              value={birthDate}
+              onChangeText={(text) => setBirthDate(formatDate(text))}
+              placeholder="GG/AA/YYYY"
+              placeholderTextColor={Colors.textMuted}
+              keyboardType="numeric"
+              maxLength={10}
+            />
+          </View>
+
+          <View style={styles.inputContainer}>
+            <View style={styles.inputLabelRow}>
+              <CreditCard size={16} color={Colors.secondary} />
+              <Text style={styles.inputLabel}>TC Kimlik No</Text>
+            </View>
+            <View style={[styles.input, styles.inputDisabled]}>
+              <Text style={styles.inputDisabledText}>{tcIdentity}</Text>
+            </View>
+            <Text style={styles.inputHint}>TC Kimlik No değiştirilemez</Text>
+          </View>
+
+          <View style={styles.inputContainer}>
+            <View style={styles.inputLabelRow}>
+              <MapPin size={16} color={Colors.secondary} />
+              <Text style={styles.inputLabel}>Şehir</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.pickerButton}
+              onPress={() => setShowCityPicker(!showCityPicker)}
+            >
+              <Text style={city ? styles.pickerText : styles.pickerPlaceholder}>
+                {city || 'Şehir seçin'}
+              </Text>
+              <ChevronDown size={20} color={Colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+
+          {showCityPicker && (
+            <ScrollView style={styles.pickerList} nestedScrollEnabled>
+              {TURKISH_CITIES.map((c) => (
+                <TouchableOpacity
+                  key={c}
+                  style={[styles.pickerOption, city === c && styles.pickerOptionSelected]}
+                  onPress={() => {
+                    setCity(c);
+                    setShowCityPicker(false);
+                  }}
+                >
+                  <Text style={[styles.pickerOptionText, city === c && styles.pickerOptionTextSelected]}>
+                    {c}
+                  </Text>
+                  {city === c && <Check size={16} color={Colors.secondary} />}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
         </View>
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Banka Hesapları</Text>
             <TouchableOpacity 
-              style={styles.addBankButton}
+              style={styles.addButton}
               onPress={() => setShowAddBankModal(true)}
             >
               <Plus size={16} color={Colors.secondary} />
-              <Text style={styles.addBankButtonText}>Hesap Ekle</Text>
+              <Text style={styles.addButtonText}>Yeni IBAN Ekle</Text>
             </TouchableOpacity>
           </View>
 
           {savedIbans.length === 0 ? (
-            <View style={styles.emptyBankCard}>
-              <CreditCard size={32} color={Colors.textMuted} />
-              <Text style={styles.emptyBankText}>Henüz banka hesabı eklenmemiş</Text>
-              <TouchableOpacity 
-                style={styles.emptyBankButton}
-                onPress={() => setShowAddBankModal(true)}
-              >
-                <Text style={styles.emptyBankButtonText}>İlk Hesabı Ekle</Text>
-              </TouchableOpacity>
+            <View style={styles.emptyState}>
+              <Building2 size={32} color={Colors.textMuted} />
+              <Text style={styles.emptyStateText}>Henüz banka hesabı eklenmemiş</Text>
             </View>
           ) : (
             <View style={styles.bankList}>
               {savedIbans.map((iban) => {
                 const statusConfig = STATUS_CONFIG[iban.status];
                 const StatusIcon = statusConfig.icon;
-                
                 return (
                   <View key={iban.id} style={styles.bankCard}>
                     <View style={styles.bankCardHeader}>
@@ -481,126 +514,24 @@ export default function ProfileScreen() {
                         )}
                       </View>
                     )}
-
-                    {iban.status === 'pending' && (
-                      <View style={styles.pendingInfo}>
-                        <Text style={styles.pendingInfoText}>
-                          Compass Abroad admin onayı bekleniyor...
-                        </Text>
-                      </View>
-                    )}
                   </View>
                 );
               })}
             </View>
           )}
-
-          {pendingAccounts.length > 0 && (
-            <View style={styles.pendingNote}>
-              <AlertCircle size={14} color={Colors.warning} />
-              <Text style={styles.pendingNoteText}>
-                {pendingAccounts.length} hesap admin onayı bekliyor
-              </Text>
-            </View>
-          )}
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Ayarlar</Text>
-          
-          <View style={styles.settingsCard}>
-            <TouchableOpacity style={styles.settingItem}>
-              <View style={styles.settingLeft}>
-                <View style={[styles.settingIcon, { backgroundColor: Colors.info + '20' }]}>
-                  <Bell size={18} color={Colors.info} />
-                </View>
-                <Text style={styles.settingLabel}>Bildirimler</Text>
-              </View>
-              <Switch
-                value={notifications}
-                onValueChange={setNotifications}
-                trackColor={{ false: Colors.border, true: Colors.primary }}
-                thumbColor={Colors.text}
-              />
-            </TouchableOpacity>
-
-            <View style={styles.settingDivider} />
-
-            <TouchableOpacity
-              style={styles.settingItem}
-              onPress={() => setLanguage(language === 'tr' ? 'en' : 'tr')}
-            >
-              <View style={styles.settingLeft}>
-                <View style={[styles.settingIcon, { backgroundColor: Colors.secondary + '20' }]}>
-                  <Globe size={18} color={Colors.secondary} />
-                </View>
-                <Text style={styles.settingLabel}>Dil / Language</Text>
-              </View>
-              <View style={styles.languageToggle}>
-                <Text style={[styles.langOption, language === 'tr' && styles.langOptionActive]}>
-                  TR
-                </Text>
-                <Text style={styles.langDivider}>|</Text>
-                <Text style={[styles.langOption, language === 'en' && styles.langOptionActive]}>
-                  EN
-                </Text>
-              </View>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Yasal</Text>
-          
-          <View style={styles.settingsCard}>
-            <View style={styles.settingItem}>
-              <View style={styles.settingLeft}>
-                <View style={[styles.settingIcon, { backgroundColor: Colors.success + '20' }]}>
-                  <Shield size={18} color={Colors.success} />
-                </View>
-                <View>
-                  <Text style={styles.settingLabel}>KVKK Onayı</Text>
-                  <Text style={styles.settingSubtext}>
-                    Kişisel verilerin işlenmesine izin
-                  </Text>
-                </View>
-              </View>
-              <Switch
-                value={kvkkConsent}
-                onValueChange={handleKvkkToggle}
-                trackColor={{ false: Colors.border, true: Colors.success }}
-                thumbColor={Colors.text}
-              />
-            </View>
-
-            <View style={styles.settingDivider} />
-
-            <TouchableOpacity style={styles.settingItem}>
-              <View style={styles.settingLeft}>
-                <View style={[styles.settingIcon, { backgroundColor: Colors.primary + '20' }]}>
-                  <Shield size={18} color={Colors.primary} />
-                </View>
-                <Text style={styles.settingLabel}>Gizlilik Politikası</Text>
-              </View>
-              <ChevronRight size={20} color={Colors.textMuted} />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <TouchableOpacity style={styles.logoutButton}>
-          <LogOut size={20} color={Colors.error} />
-          <Text style={styles.logoutText}>Çıkış Yap</Text>
+        <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
+          <Text style={styles.saveButtonText}>Değişiklikleri Kaydet</Text>
         </TouchableOpacity>
 
-        <Text style={styles.version}>v1.0.0 • Compass Abroad Ambassador</Text>
-        
         <View style={{ height: 40 }} />
       </ScrollView>
 
       <Modal visible={showAddBankModal} animationType="slide" presentationStyle="pageSheet">
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Banka Hesabı Ekle</Text>
+            <Text style={styles.modalTitle}>Yeni IBAN Ekle</Text>
             <TouchableOpacity 
               style={styles.modalCloseButton}
               onPress={() => {
@@ -614,9 +545,9 @@ export default function ProfileScreen() {
 
           <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
             <View style={styles.formGroup}>
-              <View style={styles.formLabelRow}>
+              <View style={styles.inputLabelRow}>
                 <Building2 size={18} color={Colors.secondary} />
-                <Text style={styles.formLabel}>Banka Seçin</Text>
+                <Text style={styles.inputLabel}>Banka Seçin</Text>
               </View>
               <TouchableOpacity 
                 style={styles.bankSelector} 
@@ -649,9 +580,9 @@ export default function ProfileScreen() {
             </View>
 
             <View style={styles.formGroup}>
-              <View style={styles.formLabelRow}>
+              <View style={styles.inputLabelRow}>
                 <CreditCard size={18} color={Colors.secondary} />
-                <Text style={styles.formLabel}>IBAN</Text>
+                <Text style={styles.inputLabel}>IBAN</Text>
               </View>
               <TextInput
                 style={[styles.ibanInput, ibanError ? styles.ibanInputError : null]}
@@ -706,8 +637,48 @@ export default function ProfileScreen() {
               onPress={handleAddBank}
               disabled={!newBankName || newIban.length !== 26}
             >
-              <Text style={styles.submitButtonText}>Hesap Ekle</Text>
+              <Text style={styles.submitButtonText}>IBAN Ekle</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={showNameChangeModal} animationType="fade" transparent>
+        <View style={styles.nameChangeModalOverlay}>
+          <View style={styles.nameChangeModalContent}>
+            <View style={styles.nameChangeModalHeader}>
+              <AlertCircle size={48} color={Colors.warning} />
+              <Text style={styles.nameChangeModalTitle}>İsim Değişikliği</Text>
+            </View>
+            <Text style={styles.nameChangeModalText}>
+              İsim değişikliği admin onayı gerektirir. Talep oluşturulsun mu?
+            </Text>
+            <View style={styles.nameChangeModalInfo}>
+              <View style={styles.nameChangeRow}>
+                <Text style={styles.nameChangeLabel}>Mevcut:</Text>
+                <Text style={styles.nameChangeValue}>{originalFirstName} {originalLastName}</Text>
+              </View>
+              <View style={styles.nameChangeRow}>
+                <Text style={styles.nameChangeLabel}>Yeni:</Text>
+                <Text style={[styles.nameChangeValue, { color: Colors.secondary }]}>
+                  {pendingFirstName} {pendingLastName}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.nameChangeModalButtons}>
+              <TouchableOpacity 
+                style={styles.nameChangeModalCancel}
+                onPress={() => setShowNameChangeModal(false)}
+              >
+                <Text style={styles.nameChangeModalCancelText}>İptal</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.nameChangeModalConfirm}
+                onPress={submitNameChangeRequest}
+              >
+                <Text style={styles.nameChangeModalConfirmText}>Talep Oluştur</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -720,239 +691,199 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
-  header: {
-    paddingHorizontal: 20,
-    paddingBottom: 24,
-  },
-  profileHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  avatar: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: Colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 16,
-    borderWidth: 3,
-  },
-  avatarText: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: Colors.text,
-  },
-  typeBadgeSmall: {
-    position: 'absolute',
-    bottom: -2,
-    right: -2,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: Colors.background,
-  },
-  profileInfo: {
-    flex: 1,
-  },
-  profileNameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  editButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: Colors.secondary + '20',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pendingNameBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: Colors.warning + '15',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    marginBottom: 8,
-    alignSelf: 'flex-start',
-  },
-  pendingNameText: {
-    fontSize: 11,
-    color: Colors.warning,
-    fontWeight: '500' as const,
-  },
-  profileName: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: Colors.text,
-    marginBottom: 4,
-  },
-  profileEmail: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    marginBottom: 8,
-  },
-  typeBadge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  typeBadgeText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
   content: {
     flex: 1,
   },
   contentContainer: {
-    paddingHorizontal: 16,
+    padding: 20,
   },
-  qrSection: {
+  avatarSection: {
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 32,
   },
-  qrContainer: {
+  avatarContainer: {
+    position: 'relative',
+  },
+  avatar: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
     backgroundColor: Colors.surface,
-    borderRadius: 20,
-    padding: 24,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: Colors.border,
-    width: '100%',
-  },
-  qrImageContainer: {
-    width: 180,
-    height: 180,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
-    padding: 10,
+    borderWidth: 3,
+    borderColor: Colors.secondary,
   },
-  qrImage: {
-    width: 160,
-    height: 160,
-  },
-  referralCode: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: Colors.secondary,
-    letterSpacing: 2,
-    marginBottom: 6,
-  },
-  referralLink: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    marginBottom: 16,
-  },
-  qrButtons: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  qrButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: Colors.primary,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 10,
-  },
-  qrButtonText: {
-    fontSize: 13,
-    fontWeight: '600',
+  avatarText: {
+    fontSize: 32,
+    fontWeight: '700' as const,
     color: Colors.text,
   },
-  qrHint: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    textAlign: 'center',
+  cameraButton: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.secondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: Colors.background,
+  },
+  changePhotoText: {
     marginTop: 12,
-    paddingHorizontal: 20,
+    fontSize: 14,
+    color: Colors.secondary,
+    fontWeight: '600' as const,
   },
   section: {
-    marginBottom: 24,
+    marginBottom: 28,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
-    marginLeft: 4,
+    marginBottom: 16,
   },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 18,
+    fontWeight: '600' as const,
     color: Colors.text,
-    marginBottom: 12,
-    marginLeft: 4,
+    marginBottom: 16,
   },
-  addBankButton: {
+  addButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
     backgroundColor: Colors.secondary + '20',
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 8,
     borderRadius: 8,
+    marginBottom: 16,
   },
-  addBankButtonText: {
+  addButtonText: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: Colors.secondary,
   },
-  tierContainer: {
+  inputRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+  },
+  inputContainer: {
+    marginBottom: 16,
+  },
+  inputLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: Colors.text,
+  },
+  input: {
     backgroundColor: Colors.surface,
-    borderRadius: 16,
-    padding: 20,
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 16,
+    color: Colors.text,
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  tierItem: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  tierDot: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    alignItems: 'center',
+  inputDisabled: {
+    backgroundColor: Colors.surfaceLight,
     justifyContent: 'center',
-    marginBottom: 8,
   },
-  tierDotActive: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    borderWidth: 2,
-    borderColor: Colors.background,
-  },
-  tierLabel: {
-    fontSize: 10,
+  inputDisabledText: {
+    fontSize: 16,
     color: Colors.textMuted,
-    fontWeight: '500',
   },
-  tierLine: {
-    position: 'absolute',
-    top: 12,
-    left: '60%',
-    right: '-40%',
-    height: 2,
-    backgroundColor: Colors.border,
-    zIndex: -1,
+  inputHint: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    marginTop: 6,
   },
-  emptyBankCard: {
+  nameChangeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: Colors.warning + '15',
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 16,
+  },
+  nameChangeButtonText: {
+    fontSize: 13,
+    color: Colors.warning,
+    fontWeight: '500' as const,
+  },
+  pendingNameBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: Colors.warning + '15',
+    padding: 14,
+    borderRadius: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: Colors.warning + '30',
+  },
+  pendingNameText: {
+    flex: 1,
+    fontSize: 13,
+    color: Colors.warning,
+    fontWeight: '500' as const,
+  },
+  pickerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  pickerText: {
+    fontSize: 16,
+    color: Colors.text,
+  },
+  pickerPlaceholder: {
+    fontSize: 16,
+    color: Colors.textMuted,
+  },
+  pickerList: {
+    backgroundColor: Colors.surfaceElevated,
+    borderRadius: 12,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    maxHeight: 200,
+  },
+  pickerOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  pickerOptionSelected: {
+    backgroundColor: Colors.primary + '30',
+  },
+  pickerOptionText: {
+    fontSize: 15,
+    color: Colors.text,
+  },
+  pickerOptionTextSelected: {
+    color: Colors.secondary,
+    fontWeight: '600' as const,
+  },
+  emptyState: {
     backgroundColor: Colors.surface,
     borderRadius: 16,
     padding: 32,
@@ -961,22 +892,10 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     borderStyle: 'dashed',
   },
-  emptyBankText: {
+  emptyStateText: {
     fontSize: 14,
     color: Colors.textMuted,
     marginTop: 12,
-    marginBottom: 16,
-  },
-  emptyBankButton: {
-    backgroundColor: Colors.secondary,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 10,
-  },
-  emptyBankButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.primaryDark,
   },
   bankList: {
     gap: 12,
@@ -1006,7 +925,7 @@ const styles = StyleSheet.create({
   },
   bankName: {
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: Colors.text,
   },
   defaultBadge: {
@@ -1020,7 +939,7 @@ const styles = StyleSheet.create({
   },
   defaultBadgeText: {
     fontSize: 10,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: Colors.secondary,
   },
   ibanNumber: {
@@ -1038,7 +957,7 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: '600' as const,
   },
   bankCardActions: {
     flexDirection: 'row',
@@ -1062,108 +981,19 @@ const styles = StyleSheet.create({
   },
   bankActionText: {
     fontSize: 12,
-    fontWeight: '500',
+    fontWeight: '500' as const,
     color: Colors.textSecondary,
   },
-  pendingInfo: {
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-  },
-  pendingInfoText: {
-    fontSize: 12,
-    color: Colors.warning,
-    fontStyle: 'italic',
-  },
-  pendingNote: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 12,
-    paddingHorizontal: 4,
-  },
-  pendingNoteText: {
-    fontSize: 12,
-    color: Colors.warning,
-  },
-  settingsCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    overflow: 'hidden',
-  },
-  settingItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 16,
-  },
-  settingLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    flex: 1,
-  },
-  settingIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  settingLabel: {
-    fontSize: 15,
-    color: Colors.text,
-    fontWeight: '500',
-  },
-  settingSubtext: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    marginTop: 2,
-  },
-  settingDivider: {
-    height: 1,
-    backgroundColor: Colors.border,
-    marginLeft: 64,
-  },
-  languageToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  langOption: {
-    fontSize: 14,
-    color: Colors.textMuted,
-    fontWeight: '500',
-  },
-  langOptionActive: {
-    color: Colors.secondary,
-    fontWeight: '700',
-  },
-  langDivider: {
-    color: Colors.textMuted,
-  },
-  logoutButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    backgroundColor: Colors.error + '15',
+  saveButton: {
+    backgroundColor: Colors.secondary,
     padding: 16,
     borderRadius: 12,
-    marginBottom: 16,
+    alignItems: 'center',
   },
-  logoutText: {
+  saveButtonText: {
     fontSize: 16,
-    fontWeight: '600',
-    color: Colors.error,
-  },
-  version: {
-    fontSize: 12,
-    color: Colors.textMuted,
-    textAlign: 'center',
+    fontWeight: '700' as const,
+    color: Colors.primaryDark,
   },
   modalContainer: {
     flex: 1,
@@ -1180,7 +1010,7 @@ const styles = StyleSheet.create({
   },
   modalTitle: {
     fontSize: 20,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     color: Colors.text,
   },
   modalCloseButton: {
@@ -1197,17 +1027,6 @@ const styles = StyleSheet.create({
   },
   formGroup: {
     marginBottom: 24,
-  },
-  formLabelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 12,
-  },
-  formLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.text,
   },
   bankSelector: {
     flexDirection: 'row',
@@ -1252,7 +1071,7 @@ const styles = StyleSheet.create({
   },
   bankOptionTextSelected: {
     color: Colors.secondary,
-    fontWeight: '600',
+    fontWeight: '600' as const,
   },
   ibanInput: {
     backgroundColor: Colors.surface,
@@ -1303,7 +1122,7 @@ const styles = StyleSheet.create({
   },
   infoCardTitle: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: Colors.info,
     marginBottom: 4,
   },
@@ -1330,7 +1149,7 @@ const styles = StyleSheet.create({
   },
   cancelButtonText: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: Colors.textSecondary,
   },
   submitButton: {
@@ -1345,7 +1164,85 @@ const styles = StyleSheet.create({
   },
   submitButtonText: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '700' as const,
+    color: Colors.primaryDark,
+  },
+  nameChangeModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  nameChangeModalContent: {
+    backgroundColor: Colors.background,
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+  },
+  nameChangeModalHeader: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  nameChangeModalTitle: {
+    fontSize: 20,
+    fontWeight: '700' as const,
+    color: Colors.text,
+    marginTop: 12,
+  },
+  nameChangeModalText: {
+    fontSize: 15,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  nameChangeModalInfo: {
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 24,
+  },
+  nameChangeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+  },
+  nameChangeLabel: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+  },
+  nameChangeValue: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: Colors.text,
+  },
+  nameChangeModalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  nameChangeModalCancel: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor: Colors.surface,
+    alignItems: 'center',
+  },
+  nameChangeModalCancelText: {
+    fontSize: 15,
+    fontWeight: '600' as const,
+    color: Colors.textSecondary,
+  },
+  nameChangeModalConfirm: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor: Colors.secondary,
+    alignItems: 'center',
+  },
+  nameChangeModalConfirmText: {
+    fontSize: 15,
+    fontWeight: '700' as const,
     color: Colors.primaryDark,
   },
 });
