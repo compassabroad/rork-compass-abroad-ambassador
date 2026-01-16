@@ -81,9 +81,8 @@ export default function TabLayout() {
       <Tabs.Screen
         name="profile"
         options={{
-          title: "Elçi Profili",
+          title: "Profil",
           tabBarIcon: ({ color, size }) => <UserCircle color={color} size={size} />,
-          href: isAdmin ? null : undefined,
         }}
       />
       <Tabs.Screen
