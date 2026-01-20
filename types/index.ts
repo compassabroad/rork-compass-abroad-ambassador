@@ -182,6 +182,24 @@ export interface Message {
   senderId: string;
   timestamp: string;
   read: boolean;
+  isTicket?: boolean;
+  ticketId?: string;
+}
+
+export type TicketStatus = 'open' | 'in_progress' | 'resolved';
+export type TicketPriority = 'low' | 'medium' | 'high';
+
+export interface ChatTicket {
+  id: string;
+  subject: string;
+  message: string;
+  createdAt: string;
+  status: TicketStatus;
+  priority: TicketPriority;
+  ambassadorId: string;
+  ambassadorName: string;
+  resolvedAt?: string;
+  responses: Message[];
 }
 
 export interface Conversation {

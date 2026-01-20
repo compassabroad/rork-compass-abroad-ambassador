@@ -9,6 +9,7 @@ import Colors from "@/constants/colors";
 import { NotificationProvider } from "@/contexts/NotificationContext";
 import { ExchangeRateProvider } from "@/contexts/ExchangeRateContext";
 import { SocialMediaProvider } from "@/contexts/SocialMediaContext";
+import { ChatProvider } from "@/contexts/ChatContext";
 import { trpc, trpcClient } from "@/lib/trpc";
 
 SplashScreen.preventAutoHideAsync();
@@ -112,8 +113,10 @@ export default function RootLayout() {
           <ExchangeRateProvider>
             <SocialMediaProvider>
               <NotificationProvider>
-                <StatusBar style="light" />
-                <RootLayoutNav />
+                <ChatProvider>
+                  <StatusBar style="light" />
+                  <RootLayoutNav />
+                </ChatProvider>
               </NotificationProvider>
             </SocialMediaProvider>
           </ExchangeRateProvider>

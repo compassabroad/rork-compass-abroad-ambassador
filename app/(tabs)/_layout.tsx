@@ -1,13 +1,35 @@
 import { Tabs } from "expo-router";
 import { LayoutDashboard, Users, Network, Wallet, MessageCircle, Shield, UsersRound, UserCircle } from "lucide-react-native";
 import React from "react";
-import { Platform } from "react-native";
+import { Platform, View, Text, StyleSheet } from "react-native";
 
 import Colors from "@/constants/colors";
 import { MOCK_CURRENT_USER } from "@/mocks/data";
+import { useChat } from "@/contexts/ChatContext";
+
+const styles = StyleSheet.create({
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -8,
+    backgroundColor: Colors.error,
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  badgeText: {
+    color: Colors.text,
+    fontSize: 10,
+    fontWeight: '700' as const,
+  },
+});
 
 export default function TabLayout() {
   const isAdmin = MOCK_CURRENT_USER.role === 'admin';
+  const { unreadCount } = useChat();
 
   return (
     <Tabs
@@ -60,7 +82,18 @@ export default function TabLayout() {
         name="chat"
         options={{
           title: "Mesajlar",
-          tabBarIcon: ({ color, size }) => <MessageCircle color={color} size={size} />,
+          tabBarIcon: ({ color, size }) => (
+            <View>
+              <MessageCircle color={color} size={size} />
+              {unreadCount > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </Text>
+                </View>
+              )}
+            </View>
+          ),
         }}
       />
       <Tabs.Screen
