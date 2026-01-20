@@ -24,6 +24,7 @@ import {
   Share2,
   UserCog,
   ArrowRight,
+  Briefcase,
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -346,6 +347,25 @@ export default function AdminScreen() {
               <Text style={styles.commissionsLinkTitle}>Sosyal Medya Linkleri</Text>
               <Text style={styles.commissionsLinkSubtitle}>
                 Instagram, LinkedIn, Twitter ve Facebook linklerini yönet
+              </Text>
+            </View>
+          </View>
+          <ChevronRight color={Colors.textMuted} size={24} />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.commissionsLink}
+          onPress={() => router.push('/admin/team')}
+          testID="team-management-button"
+        >
+          <View style={styles.commissionsLinkContent}>
+            <View style={[styles.commissionsIconContainer, { backgroundColor: Colors.info + '20' }]}>
+              <Briefcase color={Colors.info} size={24} />
+            </View>
+            <View style={styles.commissionsTextContainer}>
+              <Text style={styles.commissionsLinkTitle}>Danışman Ekibi</Text>
+              <Text style={styles.commissionsLinkSubtitle}>
+                Ekip üyelerini ekle, düzenle ve yönet
               </Text>
             </View>
           </View>
