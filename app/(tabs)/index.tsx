@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Animated,
   RefreshControl,
+  Image,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -29,6 +30,9 @@ import {
   Facebook,
   RefreshCw,
   UserPlus2,
+  Sparkles,
+  MapPin,
+  Calendar,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 
@@ -59,6 +63,29 @@ export default function DashboardScreen() {
 
   const ambassadorId = MOCK_CURRENT_AMBASSADOR.id;
   const earnings = calculateTotalEarnings(MOCK_STUDENTS, ambassadorId);
+
+  const getGreeting = useMemo(() => {
+    const hour = new Date().getHours();
+    if (hour >= 5 && hour < 12) return 'Günaydın';
+    if (hour >= 12 && hour < 18) return 'İyi Günler';
+    if (hour >= 18 && hour < 22) return 'İyi Akşamlar';
+    return 'İyi Geceler';
+  }, []);
+
+  const getMotivationalMessage = useMemo(() => {
+    const messages = [
+      'Bugün harika bir gün olacak! 🌟',
+      'Hedeflerine bir adım daha yaklaş! 🚀',
+      'Başarıya giden yolda ilerliyorsun! 💪',
+      'Her yeni öğrenci bir fırsat! ✨',
+    ];
+    return messages[Math.floor(Math.random() * messages.length)];
+  }, []);
+
+  const formattedJoinDate = useMemo(() => {
+    const date = new Date(MOCK_CURRENT_AMBASSADOR.joinedAt);
+    return date.toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' });
+  }, []);
 
   const handleAddStudent = (student: NewStudent) => {
     console.log('New student added:', student);
@@ -112,27 +139,57 @@ export default function DashboardScreen() {
         style={[styles.headerGradient, { paddingTop: insets.top }]}
       >
         <Animated.View style={[styles.header, { opacity: fadeAnim }]}>
-          <View style={styles.headerTop}>
-            <View style={styles.headerLeft}>
-              <View>
-                <Text style={styles.greeting}>Merhaba,</Text>
-                <Text style={styles.userName}>{MOCK_CURRENT_AMBASSADOR.name}</Text>
-              </View>
-              <View style={[styles.badge, { backgroundColor: AMBASSADOR_TYPE_LABELS[MOCK_CURRENT_AMBASSADOR.type].color + '30' }]}>
-                <Award size={16} color={AMBASSADOR_TYPE_LABELS[MOCK_CURRENT_AMBASSADOR.type].color} />
-                <Text style={[styles.badgeText, { color: AMBASSADOR_TYPE_LABELS[MOCK_CURRENT_AMBASSADOR.type].color }]}>
-                  {AMBASSADOR_TYPE_LABELS[MOCK_CURRENT_AMBASSADOR.type].tr}
-                </Text>
-              </View>
-            </View>
-            <View style={styles.headerActions}>
-              <TouchableOpacity
-                style={styles.helpButton}
-                onPress={() => setShowHowItWorksModal(true)}
+          <View style={styles.headerTopActions}>
+            <TouchableOpacity
+              style={styles.helpButton}
+              onPress={() => setShowHowItWorksModal(true)}
+            >
+              <HelpCircle size={22} color={Colors.textSecondary} />
+            </TouchableOpacity>
+            <NotificationBell />
+          </View>
+
+          <View style={styles.welcomeSection}>
+            <View style={styles.welcomeAvatarContainer}>
+              <LinearGradient
+                colors={[Colors.secondary, '#F59E0B']}
+                style={styles.welcomeAvatarGradient}
               >
-                <HelpCircle size={22} color={Colors.textSecondary} />
-              </TouchableOpacity>
-              <NotificationBell />
+                <View style={styles.welcomeAvatar}>
+                  <Text style={styles.welcomeAvatarText}>
+                    {MOCK_CURRENT_AMBASSADOR.firstName[0]}{MOCK_CURRENT_AMBASSADOR.lastName[0]}
+                  </Text>
+                </View>
+              </LinearGradient>
+              <View style={styles.onlineIndicator} />
+            </View>
+
+            <View style={styles.welcomeContent}>
+              <View style={styles.greetingRow}>
+                <Text style={styles.greetingText}>{getGreeting}</Text>
+                <Sparkles size={18} color={Colors.secondary} />
+              </View>
+              <Text style={styles.welcomeNameText}>
+                {MOCK_CURRENT_AMBASSADOR.firstName} {MOCK_CURRENT_AMBASSADOR.lastName}
+              </Text>
+              <Text style={styles.motivationalText}>{getMotivationalMessage}</Text>
+              
+              <View style={styles.welcomeMetaRow}>
+                <View style={[styles.ambassadorTypeBadge, { backgroundColor: AMBASSADOR_TYPE_LABELS[MOCK_CURRENT_AMBASSADOR.type].color + '25' }]}>
+                  <Award size={14} color={AMBASSADOR_TYPE_LABELS[MOCK_CURRENT_AMBASSADOR.type].color} />
+                  <Text style={[styles.ambassadorTypeBadgeText, { color: AMBASSADOR_TYPE_LABELS[MOCK_CURRENT_AMBASSADOR.type].color }]}>
+                    {AMBASSADOR_TYPE_LABELS[MOCK_CURRENT_AMBASSADOR.type].tr}
+                  </Text>
+                </View>
+                <View style={styles.metaItem}>
+                  <MapPin size={12} color={Colors.textMuted} />
+                  <Text style={styles.metaItemText}>{MOCK_CURRENT_AMBASSADOR.city}</Text>
+                </View>
+                <View style={styles.metaItem}>
+                  <Calendar size={12} color={Colors.textMuted} />
+                  <Text style={styles.metaItemText}>{formattedJoinDate}</Text>
+                </View>
+              </View>
             </View>
           </View>
           
@@ -390,17 +447,14 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 20,
-    paddingTop: 16,
+    paddingTop: 12,
   },
-  headerTop: {
+  headerTopActions: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
-  headerActions: {
-    flexDirection: 'row',
+    justifyContent: 'flex-end',
     alignItems: 'center',
     gap: 8,
+    marginBottom: 16,
   },
   helpButton: {
     width: 40,
@@ -410,30 +464,97 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerLeft: {
+  welcomeSection: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 16,
+    marginBottom: 16,
+  },
+  welcomeAvatarContainer: {
+    position: 'relative',
+  },
+  welcomeAvatarGradient: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    padding: 3,
+  },
+  welcomeAvatar: {
     flex: 1,
+    backgroundColor: Colors.primary,
+    borderRadius: 33,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  greeting: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    marginBottom: 4,
-  },
-  userName: {
+  welcomeAvatarText: {
     fontSize: 24,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     color: Colors.text,
   },
-  badge: {
+  onlineIndicator: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: Colors.success,
+    borderWidth: 3,
+    borderColor: Colors.gradient.start,
+  },
+  welcomeContent: {
+    flex: 1,
+  },
+  greetingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
     gap: 6,
+    marginBottom: 2,
   },
-  badgeText: {
-    fontSize: 12,
-    fontWeight: '600',
+  greetingText: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    fontWeight: '500' as const,
+  },
+  welcomeNameText: {
+    fontSize: 26,
+    fontWeight: '700' as const,
+    color: Colors.text,
+    marginBottom: 4,
+  },
+  motivationalText: {
+    fontSize: 13,
+    color: Colors.secondary,
+    fontWeight: '500' as const,
+    marginBottom: 10,
+  },
+  welcomeMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  ambassadorTypeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+  },
+  ambassadorTypeBadgeText: {
+    fontSize: 11,
+    fontWeight: '600' as const,
+  },
+  metaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  metaItemText: {
+    fontSize: 11,
+    color: Colors.textMuted,
+    fontWeight: '500' as const,
   },
   exchangeRateContainer: {
     marginTop: 16,
