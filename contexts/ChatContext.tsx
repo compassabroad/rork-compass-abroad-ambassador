@@ -230,10 +230,14 @@ export const [ChatProvider, useChat] = createContextHook(() => {
   }, [messages, tickets, saveMessages, saveTickets]);
 
   const markAllAsRead = useCallback(() => {
-    const updated = messages.map(m => ({ ...m, read: true }));
-    setMessages(updated);
-    saveMessages(updated);
-  }, [messages, saveMessages]);
+    setMessages(prev => {
+      const hasUnread = prev.some(m => !m.read);
+      if (!hasUnread) return prev;
+      const updated = prev.map(m => ({ ...m, read: true }));
+      saveMessages(updated);
+      return updated;
+    });
+  }, [saveMessages]);
 
   const getLastMessage = useCallback(() => {
     if (messages.length === 0) return null;
