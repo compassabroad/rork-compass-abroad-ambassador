@@ -1,4 +1,4 @@
-import { Client, SendEmailV3_1, LibraryResponse } from "node-mailjet";
+import Mailjet from "node-mailjet";
 import * as z from "zod";
 
 import { createTRPCRouter, publicProcedure } from "../create-context";
@@ -9,7 +9,7 @@ const getMailjetClient = () => {
   if (!apiKey || !apiSecret) {
     throw new Error("MAILJET_API_KEY veya MAILJET_SECRET_KEY yapılandırılmamış");
   }
-  return new Client({
+  return new Mailjet({
     apiKey,
     apiSecret,
   });
@@ -27,7 +27,7 @@ const sendEmail = async (params: {
 }) => {
   const client = getMailjetClient();
 
-  const data: SendEmailV3_1.Body = {
+  const data = {
     Messages: [
       {
         From: {
@@ -47,11 +47,11 @@ const sendEmail = async (params: {
     ],
   };
 
-  const result: LibraryResponse<SendEmailV3_1.Response> = await client
+  const result = await client
     .post("send", { version: "v3.1" })
-    .request(data);
+    .request(data) as { body?: { Messages?: Array<{ Status?: string; Errors?: unknown[]; To?: Array<{ MessageID?: number }> }> } };
 
-  const messageResult = result.body?.Messages?.[0];
+  const messageResult = result?.body?.Messages?.[0];
   console.log("[Email] Mailjet response status:", messageResult?.Status);
 
   if (messageResult?.Status === "error") {
