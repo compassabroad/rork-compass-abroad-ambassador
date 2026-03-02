@@ -5,7 +5,7 @@ import { cors } from "hono/cors";
 import { appRouter } from "./trpc/app-router";
 import { createContext } from "./trpc/create-context";
 
-console.log("[Backend] Starting Compass Abroad API...");
+console.log("[Backend] Starting Compass Abroad API v2...");
 
 const app = new Hono();
 
