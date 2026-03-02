@@ -5,6 +5,7 @@ import { authRouter } from "./routes/auth";
 import { dashboardRouter } from "./routes/dashboard";
 import { studentsRouter } from "./routes/students";
 import { withdrawalRouter } from "./routes/withdrawal";
+import { networkRouter } from "./routes/network";
 
 export const appRouter = createTRPCRouter({
   email: emailRouter,
@@ -13,6 +14,7 @@ export const appRouter = createTRPCRouter({
   dashboard: dashboardRouter,
   students: studentsRouter,
   withdrawal: withdrawalRouter,
+  network: networkRouter,
 });
 
 export type AppRouter = typeof appRouter;

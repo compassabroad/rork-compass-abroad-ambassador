@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,23 +19,41 @@ import {
   Award,
   Percent,
   DollarSign,
+  Share2,
 } from 'lucide-react-native';
 
 import Colors from '@/constants/colors';
-import { MOCK_CURRENT_AMBASSADOR, MOCK_SUB_AMBASSADORS } from '@/mocks/data';
-import { Ambassador, AMBASSADOR_TYPE_LABELS } from '@/types';
+import { useAuth } from '@/contexts/AuthContext';
+import { trpc } from '@/lib/trpc';
+import { AmbassadorType, AMBASSADOR_TYPE_LABELS } from '@/types';
+
+interface TreeNode {
+  id: string;
+  name: string;
+  firstName: string;
+  lastName: string;
+  type: string;
+  compassPoints: number;
+  studentsReferred: number;
+  totalEarningsUSD: number;
+  referralCode: string;
+  city: string | null;
+  children: TreeNode[];
+  level: number;
+}
 
 interface NetworkNodeProps {
-  ambassador: Ambassador;
+  node: TreeNode;
   level: number;
   isExpanded: boolean;
   onToggle: () => void;
   hasChildren: boolean;
 }
 
-function NetworkNode({ ambassador, level, isExpanded, onToggle, hasChildren }: NetworkNodeProps) {
-  const typeInfo = AMBASSADOR_TYPE_LABELS[ambassador.type];
-  
+function NetworkNode({ node, level, isExpanded, onToggle, hasChildren }: NetworkNodeProps) {
+  const typeKey = node.type as AmbassadorType;
+  const typeInfo = AMBASSADOR_TYPE_LABELS[typeKey] || { tr: node.type, color: '#9CA3AF' };
+
   return (
     <TouchableOpacity
       style={[styles.nodeCard, { marginLeft: level * 20 }]}
@@ -43,39 +63,39 @@ function NetworkNode({ ambassador, level, isExpanded, onToggle, hasChildren }: N
       <View style={styles.nodeContent}>
         <View style={[styles.nodeAvatar, { borderColor: typeInfo.color }]}>
           <Text style={styles.nodeInitial}>
-            {ambassador.name.split(' ').map(n => n[0]).join('')}
+            {node.name.split(' ').map(n => n[0]).join('')}
           </Text>
           <View style={[styles.typeBadge, { backgroundColor: typeInfo.color }]}>
             <Award size={10} color={Colors.background} />
           </View>
         </View>
-        
+
         <View style={styles.nodeInfo}>
           <View style={styles.nodeHeader}>
-            <Text style={styles.nodeName}>{ambassador.name}</Text>
+            <Text style={styles.nodeName}>{node.name}</Text>
             <View style={[styles.typeLabel, { backgroundColor: typeInfo.color + '20' }]}>
               <Text style={[styles.typeLabelText, { color: typeInfo.color }]}>
                 {typeInfo.tr}
               </Text>
             </View>
           </View>
-          
+
           <View style={styles.nodeStats}>
             <View style={styles.nodeStat}>
               <Users size={12} color={Colors.textSecondary} />
-              <Text style={styles.nodeStatText}>{ambassador.studentsReferred}</Text>
+              <Text style={styles.nodeStatText}>{node.studentsReferred}</Text>
             </View>
             <View style={styles.nodeStat}>
               <Star size={12} color={Colors.secondary} />
-              <Text style={styles.nodeStatText}>{ambassador.compassPoints}</Text>
+              <Text style={styles.nodeStatText}>{node.compassPoints}</Text>
             </View>
             <View style={styles.nodeStat}>
               <TrendingUp size={12} color={Colors.success} />
-              <Text style={styles.nodeStatText}>${ambassador.totalEarningsUSD.toLocaleString()}</Text>
+              <Text style={styles.nodeStatText}>${node.totalEarningsUSD.toLocaleString()}</Text>
             </View>
           </View>
         </View>
-        
+
         {hasChildren && (
           <View style={styles.expandIcon}>
             {isExpanded ? (
@@ -90,9 +110,47 @@ function NetworkNode({ ambassador, level, isExpanded, onToggle, hasChildren }: N
   );
 }
 
+function collectAllIds(nodes: TreeNode[]): string[] {
+  const ids: string[] = [];
+  for (const node of nodes) {
+    ids.push(node.id);
+    ids.push(...collectAllIds(node.children));
+  }
+  return ids;
+}
+
 export default function NetworkScreen() {
   const insets = useSafeAreaInsets();
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set(['current']));
+  const { token } = useAuth();
+
+  const treeQuery = trpc.network.getTree.useQuery(
+    { token: token || '' },
+    { enabled: !!token }
+  );
+
+  const statsQuery = trpc.network.getStats.useQuery(
+    { token: token || '' },
+    { enabled: !!token }
+  );
+
+  const commissionQuery = trpc.network.getCommissionBreakdown.useQuery(
+    { token: token || '' },
+    { enabled: !!token }
+  );
+
+  const treeData = treeQuery.data;
+  const statsData = statsQuery.data;
+  const commissionData = commissionQuery.data;
+
+  const isLoading = treeQuery.isLoading || statsQuery.isLoading;
+  const isRefreshing = treeQuery.isRefetching || statsQuery.isRefetching;
+
+  const onRefresh = useCallback(() => {
+    treeQuery.refetch();
+    statsQuery.refetch();
+    commissionQuery.refetch();
+  }, [treeQuery, statsQuery, commissionQuery]);
 
   const toggleNode = (id: string) => {
     setExpandedNodes(prev => {
@@ -106,44 +164,58 @@ export default function NetworkScreen() {
     });
   };
 
-  const getChildren = (parentId: string): Ambassador[] => {
-    return MOCK_SUB_AMBASSADORS.filter(a => a.parentId === parentId);
-  };
+  const totalNetwork = statsData?.totalAmbassadors ?? 0;
+  const totalStudentsInNetwork = statsData?.totalStudents ?? 0;
+  const totalEarningsInNetwork = statsData?.totalEarningsUSD ?? 0;
 
-  const totalNetwork = MOCK_SUB_AMBASSADORS.length + 1;
-  const totalStudentsInNetwork = MOCK_CURRENT_AMBASSADOR.studentsReferred +
-    MOCK_SUB_AMBASSADORS.reduce((sum, a) => sum + a.studentsReferred, 0);
-  const totalEarningsInNetwork = MOCK_CURRENT_AMBASSADOR.totalEarningsUSD +
-    MOCK_SUB_AMBASSADORS.reduce((sum, a) => sum + a.totalEarningsUSD, 0);
+  const networkCommissionRate = commissionData?.networkRate ?? 10;
+  const totalNetworkCommission = commissionData?.totalNetworkCommission ?? 0;
+  const directSubBreakdown = commissionData?.breakdown ?? [];
 
-  const directSubAmbassadors = MOCK_SUB_AMBASSADORS.filter(
-    a => a.parentId === MOCK_CURRENT_AMBASSADOR.id
-  );
-  
-  const networkCommissionRate = MOCK_CURRENT_AMBASSADOR.networkCommissionRate || 10;
-  const totalNetworkCommission = directSubAmbassadors.reduce(
-    (sum, sub) => sum + (sub.totalEarningsUSD * networkCommissionRate) / 100,
-    0
-  );
-
-  const renderNode = (ambassador: Ambassador, level: number) => {
-    const children = getChildren(ambassador.id);
-    const isExpanded = expandedNodes.has(ambassador.id);
-    const hasChildren = children.length > 0;
+  const renderNode = (node: TreeNode, level: number) => {
+    const isExpanded = expandedNodes.has(node.id);
+    const hasChildren = node.children.length > 0;
 
     return (
-      <View key={ambassador.id}>
+      <View key={node.id}>
         <NetworkNode
-          ambassador={ambassador}
+          node={node}
           level={level}
           isExpanded={isExpanded}
-          onToggle={() => toggleNode(ambassador.id)}
+          onToggle={() => toggleNode(node.id)}
           hasChildren={hasChildren}
         />
-        {isExpanded && children.map(child => renderNode(child, level + 1))}
+        {isExpanded && node.children.map(child => renderNode(child, level + 1))}
       </View>
     );
   };
+
+  const handleExpandAll = () => {
+    if (treeData) {
+      const allIds = new Set([treeData.id, ...collectAllIds(treeData.children)]);
+      setExpandedNodes(allIds);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <View style={styles.container}>
+        <LinearGradient
+          colors={[Colors.gradient.middle, Colors.background]}
+          style={[styles.header, { paddingTop: insets.top + 16 }]}
+        >
+          <Text style={styles.headerTitle}>Ağım</Text>
+          <Text style={styles.headerSubtitle}>MLM ağ yapısı</Text>
+        </LinearGradient>
+        <View style={styles.loadingState}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+          <Text style={styles.loadingText}>Yükleniyor...</Text>
+        </View>
+      </View>
+    );
+  }
+
+  const hasNetwork = treeData && treeData.children.length > 0;
 
   return (
     <View style={styles.container}>
@@ -155,96 +227,111 @@ export default function NetworkScreen() {
         <Text style={styles.headerSubtitle}>MLM ağ yapısı</Text>
       </LinearGradient>
 
-      <View style={styles.statsContainer}>
-        <View style={styles.statsRow}>
-          <View style={styles.statCard}>
-            <View style={[styles.statIconContainer, { backgroundColor: Colors.info + '20' }]}>
-              <Users size={20} color={Colors.info} />
+      <ScrollView
+        style={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={onRefresh}
+            tintColor={Colors.primary}
+            colors={[Colors.primary]}
+          />
+        }
+      >
+        <View style={styles.statsContainer}>
+          <View style={styles.statsRow}>
+            <View style={styles.statCard}>
+              <View style={[styles.statIconContainer, { backgroundColor: Colors.info + '20' }]}>
+                <Users size={20} color={Colors.info} />
+              </View>
+              <Text style={styles.statValue}>{totalNetwork}</Text>
+              <Text style={styles.statLabel}>Toplam Elçi</Text>
             </View>
-            <Text style={styles.statValue}>{totalNetwork}</Text>
-            <Text style={styles.statLabel}>Toplam Elçi</Text>
-          </View>
-          
-          <View style={styles.statCard}>
-            <View style={[styles.statIconContainer, { backgroundColor: Colors.success + '20' }]}>
-              <Users size={20} color={Colors.success} />
+
+            <View style={styles.statCard}>
+              <View style={[styles.statIconContainer, { backgroundColor: Colors.success + '20' }]}>
+                <Users size={20} color={Colors.success} />
+              </View>
+              <Text style={styles.statValue}>{totalStudentsInNetwork}</Text>
+              <Text style={styles.statLabel}>Ağ Öğrenci</Text>
             </View>
-            <Text style={styles.statValue}>{totalStudentsInNetwork}</Text>
-            <Text style={styles.statLabel}>Ağ Öğrenci</Text>
-          </View>
-          
-          <View style={styles.statCard}>
-            <View style={[styles.statIconContainer, { backgroundColor: Colors.secondary + '20' }]}>
-              <TrendingUp size={20} color={Colors.secondary} />
+
+            <View style={styles.statCard}>
+              <View style={[styles.statIconContainer, { backgroundColor: Colors.secondary + '20' }]}>
+                <TrendingUp size={20} color={Colors.secondary} />
+              </View>
+              <Text style={styles.statValue}>${(totalEarningsInNetwork / 1000).toFixed(1)}K</Text>
+              <Text style={styles.statLabel}>Ağ Gelir</Text>
             </View>
-            <Text style={styles.statValue}>${(totalEarningsInNetwork / 1000).toFixed(1)}K</Text>
-            <Text style={styles.statLabel}>Ağ Gelir</Text>
           </View>
         </View>
-      </View>
 
-      {directSubAmbassadors.length > 0 && (
-        <View style={styles.networkCommissionCard}>
-          <View style={styles.networkCommissionHeader}>
-            <View style={styles.networkCommissionIcon}>
-              <Percent size={20} color={Colors.secondary} />
+        {directSubBreakdown.length > 0 && (
+          <View style={styles.networkCommissionCard}>
+            <View style={styles.networkCommissionHeader}>
+              <View style={styles.networkCommissionIcon}>
+                <Percent size={20} color={Colors.secondary} />
+              </View>
+              <View style={styles.networkCommissionInfo}>
+                <Text style={styles.networkCommissionTitle}>Ağ Komisyon Kazançınız</Text>
+                <Text style={styles.networkCommissionDesc}>
+                  Alt elçilerinizin kazançlarından %{networkCommissionRate} payınız
+                </Text>
+              </View>
             </View>
-            <View style={styles.networkCommissionInfo}>
-              <Text style={styles.networkCommissionTitle}>Ağ Komisyon Kazançınız</Text>
-              <Text style={styles.networkCommissionDesc}>
-                Alt elçilerinizin kazançlarından %{networkCommissionRate} payınız
+            <View style={styles.networkCommissionAmount}>
+              <DollarSign size={24} color={Colors.secondary} />
+              <Text style={styles.networkCommissionValue}>
+                {totalNetworkCommission.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
               </Text>
             </View>
-          </View>
-          <View style={styles.networkCommissionAmount}>
-            <DollarSign size={24} color={Colors.secondary} />
-            <Text style={styles.networkCommissionValue}>
-              {totalNetworkCommission.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-            </Text>
-          </View>
-          <View style={styles.networkCommissionBreakdown}>
-            <Text style={styles.networkCommissionBreakdownTitle}>Elçi Bazlı Dağılım</Text>
-            {directSubAmbassadors.map(sub => {
-              const commission = (sub.totalEarningsUSD * networkCommissionRate) / 100;
-              return (
-                <View key={sub.id} style={styles.networkCommissionItem}>
+            <View style={styles.networkCommissionBreakdown}>
+              <Text style={styles.networkCommissionBreakdownTitle}>Elçi Bazlı Dağılım</Text>
+              {directSubBreakdown.map(sub => (
+                <View key={sub.ambassadorId} style={styles.networkCommissionItem}>
                   <Text style={styles.networkCommissionItemName}>{sub.name}</Text>
                   <Text style={styles.networkCommissionItemAmount}>
-                    ${sub.totalEarningsUSD.toLocaleString()} × %{networkCommissionRate} = ${commission.toLocaleString()}
+                    ${sub.theirEarningsUSD.toLocaleString()} × %{networkCommissionRate} = ${sub.yourCommissionUSD.toLocaleString()}
                   </Text>
                 </View>
-              );
-            })}
+              ))}
+            </View>
           </View>
-        </View>
-      )}
+        )}
 
-      <View style={styles.treeHeader}>
-        <Text style={styles.treeTitle}>Ağaç Görünümü</Text>
-        <TouchableOpacity
-          style={styles.expandAllButton}
-          onPress={() => {
-            const allIds = new Set(['current', ...MOCK_SUB_AMBASSADORS.map(a => a.id)]);
-            setExpandedNodes(allIds);
-          }}
-        >
-          <Text style={styles.expandAllText}>Tümünü Aç</Text>
-        </TouchableOpacity>
-      </View>
+        {hasNetwork ? (
+          <>
+            <View style={styles.treeHeader}>
+              <Text style={styles.treeTitle}>Ağaç Görünümü</Text>
+              <TouchableOpacity
+                style={styles.expandAllButton}
+                onPress={handleExpandAll}
+              >
+                <Text style={styles.expandAllText}>Tümünü Aç</Text>
+              </TouchableOpacity>
+            </View>
 
-      <ScrollView
-        style={styles.content}
-        contentContainerStyle={styles.contentContainer}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.rootIndicator}>
-          <View style={styles.rootLine} />
-          <Text style={styles.rootText}>SİZ</Text>
-          <View style={styles.rootLine} />
-        </View>
-        
-        {renderNode(MOCK_CURRENT_AMBASSADOR, 0)}
-        
+            <View style={styles.treeContent}>
+              <View style={styles.rootIndicator}>
+                <View style={styles.rootLine} />
+                <Text style={styles.rootText}>SİZ</Text>
+                <View style={styles.rootLine} />
+              </View>
+
+              {treeData && renderNode(treeData, 0)}
+            </View>
+          </>
+        ) : (
+          <View style={styles.emptyState}>
+            <Share2 size={48} color={Colors.textMuted} />
+            <Text style={styles.emptyStateTitle}>Henüz alt elçiniz yok</Text>
+            <Text style={styles.emptyStateText}>
+              Referans kodunuzu paylaşarak ağınızı büyütün!
+            </Text>
+          </View>
+        )}
+
         <View style={{ height: 40 }} />
       </ScrollView>
     </View>
@@ -262,11 +349,24 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 28,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     color: Colors.text,
     marginBottom: 4,
   },
   headerSubtitle: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+  },
+  scrollContent: {
+    flex: 1,
+  },
+  loadingState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  loadingText: {
     fontSize: 14,
     color: Colors.textSecondary,
   },
@@ -297,7 +397,7 @@ const styles = StyleSheet.create({
   },
   statValue: {
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     color: Colors.text,
     marginBottom: 2,
   },
@@ -334,7 +434,7 @@ const styles = StyleSheet.create({
   },
   networkCommissionTitle: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: Colors.text,
     marginBottom: 2,
   },
@@ -354,7 +454,7 @@ const styles = StyleSheet.create({
   },
   networkCommissionValue: {
     fontSize: 32,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     color: Colors.secondary,
   },
   networkCommissionBreakdown: {
@@ -364,7 +464,7 @@ const styles = StyleSheet.create({
   },
   networkCommissionBreakdownTitle: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: Colors.textSecondary,
     marginBottom: 10,
   },
@@ -378,7 +478,7 @@ const styles = StyleSheet.create({
   },
   networkCommissionItemName: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '500' as const,
     color: Colors.text,
   },
   networkCommissionItemAmount: {
@@ -394,7 +494,7 @@ const styles = StyleSheet.create({
   },
   treeTitle: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: Colors.text,
   },
   expandAllButton: {
@@ -405,13 +505,10 @@ const styles = StyleSheet.create({
   },
   expandAllText: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: Colors.primary,
   },
-  content: {
-    flex: 1,
-  },
-  contentContainer: {
+  treeContent: {
     paddingHorizontal: 16,
   },
   rootIndicator: {
@@ -427,7 +524,7 @@ const styles = StyleSheet.create({
   },
   rootText: {
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     color: Colors.secondary,
     letterSpacing: 1,
   },
@@ -457,11 +554,11 @@ const styles = StyleSheet.create({
   },
   nodeInitial: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: Colors.text,
   },
   typeBadge: {
-    position: 'absolute',
+    position: 'absolute' as const,
     bottom: -2,
     right: -2,
     width: 18,
@@ -483,7 +580,7 @@ const styles = StyleSheet.create({
   },
   nodeName: {
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: Colors.text,
   },
   typeLabel: {
@@ -493,7 +590,7 @@ const styles = StyleSheet.create({
   },
   typeLabelText: {
     fontSize: 10,
-    fontWeight: '600',
+    fontWeight: '600' as const,
   },
   nodeStats: {
     flexDirection: 'row',
@@ -507,9 +604,26 @@ const styles = StyleSheet.create({
   nodeStatText: {
     fontSize: 12,
     color: Colors.textSecondary,
-    fontWeight: '500',
+    fontWeight: '500' as const,
   },
   expandIcon: {
     marginLeft: 8,
+  },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    gap: 12,
+  },
+  emptyStateTitle: {
+    fontSize: 18,
+    fontWeight: '600' as const,
+    color: Colors.text,
+  },
+  emptyStateText: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    paddingHorizontal: 40,
   },
 });

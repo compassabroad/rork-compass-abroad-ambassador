@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,10 @@ import {
   TouchableOpacity,
   Share,
   Alert,
+  Linking,
+  TextInput,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -20,94 +24,132 @@ import {
   Send,
   Mail,
   Copy,
+  Search,
+  UserPlus,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 
 import Colors from '@/constants/colors';
-import { useExchangeRate } from '@/contexts/ExchangeRateContext';
-import { MOCK_STUDENTS, PROGRAMS, MOCK_CURRENT_AMBASSADOR } from '@/mocks/data';
-import { StudentStage, STAGE_LABELS, Student } from '@/types';
-import { calculateCommissionBreakdown } from '@/utils/commissionCalculator';
+import { useAuth } from '@/contexts/AuthContext';
+import { trpc } from '@/lib/trpc';
+import { PROGRAMS } from '@/mocks/data';
+import { StudentStage, STAGE_LABELS } from '@/types';
 
 const STAGES: StudentStage[] = ['pre_payment', 'registered', 'documents_completed', 'visa_applied', 'visa_approved', 'visa_rejected', 'orientation', 'departed'];
 
-const MOCK_PENDING_STUDENTS: Student[] = [
-  {
-    id: 'pending-1',
-    name: 'Ayşe Yılmaz',
-    email: 'ayse.yilmaz@email.com',
-    phone: '+90 532 111 2233',
-    program: 'bachelor',
-    stage: 'pre_payment',
-    registeredAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    country: 'USA',
-    invitationStatus: 'pending_kvkk',
-    invitationToken: 'abc123xyz789',
-    invitedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-    notes: 'Dil okulu sonrası lisans planlıyor',
-  },
-  {
-    id: 'pending-2',
-    name: 'Mert Kaya',
-    email: 'mert.kaya@email.com',
-    phone: '+90 533 222 3344',
-    program: 'language_education',
-    stage: 'pre_payment',
-    registeredAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    country: 'UK',
-    invitationStatus: 'pending_kvkk',
-    invitationToken: 'def456uvw012',
-    invitedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-];
+interface StudentItem {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  program: string;
+  programName: string;
+  stage: string;
+  country: string | null;
+  invitationStatus: string | null;
+  invitationToken: string | null;
+  invitedAt: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export default function StudentsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [selectedStage, setSelectedStage] = useState<StudentStage | 'all' | 'pending_kvkk'>('all');
   const scrollViewRef = useRef<ScrollView>(null);
-  const { rate: exchangeRate } = useExchangeRate();
-  const ambassadorId = MOCK_CURRENT_AMBASSADOR.id;
+  const { token } = useAuth();
+  const [searchText, setSearchText] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const allStudents = [...MOCK_STUDENTS, ...MOCK_PENDING_STUDENTS];
-  const pendingKvkkStudents = MOCK_PENDING_STUDENTS.filter(s => s.invitationStatus === 'pending_kvkk');
-  const activeStudents = MOCK_STUDENTS;
+  useEffect(() => {
+    if (searchTimerRef.current) {
+      clearTimeout(searchTimerRef.current);
+    }
+    searchTimerRef.current = setTimeout(() => {
+      setDebouncedSearch(searchText);
+    }, 300);
+    return () => {
+      if (searchTimerRef.current) {
+        clearTimeout(searchTimerRef.current);
+      }
+    };
+  }, [searchText]);
 
-  const filteredStudents = selectedStage === 'all'
-    ? allStudents
-    : selectedStage === 'pending_kvkk'
-    ? pendingKvkkStudents
-    : activeStudents.filter(s => s.stage === selectedStage);
+  const stageFilter = selectedStage === 'all' || selectedStage === 'pending_kvkk' ? undefined : selectedStage;
+
+  const studentsQuery = trpc.students.list.useQuery(
+    {
+      token: token || '',
+      stage: stageFilter,
+      search: debouncedSearch || undefined,
+    },
+    { enabled: !!token }
+  );
+
+  const allStudentsQuery = trpc.students.list.useQuery(
+    { token: token || '' },
+    { enabled: !!token }
+  );
+
+  const resendInviteMutation = trpc.students.resendInvite.useMutation({
+    onSuccess: () => {
+      Alert.alert('Başarılı', 'Davet e-postası tekrar gönderildi.');
+      studentsQuery.refetch();
+    },
+    onError: (error) => {
+      Alert.alert('Hata', error.message || 'Davet gönderilemedi');
+    },
+  });
+
+  const students = studentsQuery.data ?? [];
+  const allStudents = allStudentsQuery.data ?? [];
+
+  const pendingKvkkStudents = allStudents.filter(s => s.invitationStatus === 'pending_kvkk');
+  const activeStudents = allStudents.filter(s => s.invitationStatus !== 'pending_kvkk');
+
+  const filteredStudents = selectedStage === 'pending_kvkk'
+    ? pendingKvkkStudents.filter(s =>
+        !debouncedSearch || s.name.toLowerCase().includes(debouncedSearch.toLowerCase())
+      )
+    : students;
 
   const getStageCount = (stage: StudentStage) => {
-    return MOCK_STUDENTS.filter(s => s.stage === stage).length;
+    return activeStudents.filter(s => s.stage === stage).length;
   };
 
-  const handleResendInvite = async (student: Student) => {
+  const onRefresh = useCallback(() => {
+    studentsQuery.refetch();
+    allStudentsQuery.refetch();
+  }, [studentsQuery, allStudentsQuery]);
+
+  const handleResendInvite = async (student: StudentItem) => {
     Alert.alert(
       'Davet Gönder',
       `${student.email} adresine davet e-postası tekrar gönderilsin mi?`,
       [
         { text: 'İptal', style: 'cancel' },
-        { 
-          text: 'Gönder', 
+        {
+          text: 'Gönder',
           onPress: () => {
-            Alert.alert('Başarılı', 'Davet e-postası tekrar gönderildi.');
+            if (token) {
+              resendInviteMutation.mutate({ token, studentId: student.id });
+            }
           }
         },
       ]
     );
   };
 
-  const handleCopyInviteLink = async (student: Student) => {
+  const handleCopyInviteLink = async (student: StudentItem) => {
     const link = `https://compassabroad.com/student-registration/${student.invitationToken}`;
     await Clipboard.setStringAsync(link);
     Alert.alert('Link Kopyalandı', 'Davet linki panoya kopyalandı.');
   };
 
-  const handleShareInvite = async (student: Student) => {
+  const handleShareInvite = async (student: StudentItem) => {
     const link = `https://compassabroad.com/student-registration/${student.invitationToken}`;
     try {
       await Share.share({
@@ -125,15 +167,15 @@ export default function StudentsScreen() {
     const diffMs = now.getTime() - date.getTime();
     const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
     const diffDays = Math.floor(diffHours / 24);
-    
+
     if (diffDays > 0) return `${diffDays} gün önce`;
     if (diffHours > 0) return `${diffHours} saat önce`;
     return 'Az önce';
   };
 
-  const renderPendingStudent = (student: Student) => {
+  const renderPendingStudent = (student: StudentItem) => {
     const program = PROGRAMS.find(p => p.id === student.program);
-    
+
     return (
       <View key={student.id} style={styles.pendingCard}>
         <View style={styles.pendingHeader}>
@@ -166,11 +208,11 @@ export default function StudentsScreen() {
         <View style={styles.pendingInfo}>
           <View style={styles.pendingInfoRow}>
             <Text style={styles.pendingInfoLabel}>Program:</Text>
-            <Text style={styles.pendingInfoValue}>{program?.name || student.program}</Text>
+            <Text style={styles.pendingInfoValue}>{program?.name || student.programName}</Text>
           </View>
           <View style={styles.pendingInfoRow}>
             <Text style={styles.pendingInfoLabel}>Hedef Ülke:</Text>
-            <Text style={styles.pendingInfoValue}>{student.country}</Text>
+            <Text style={styles.pendingInfoValue}>{student.country || '-'}</Text>
           </View>
           {student.notes && (
             <View style={styles.pendingInfoRow}>
@@ -181,21 +223,21 @@ export default function StudentsScreen() {
         </View>
 
         <View style={styles.pendingActions}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.pendingActionButton}
             onPress={() => handleResendInvite(student)}
           >
             <Send size={16} color={Colors.secondary} />
             <Text style={styles.pendingActionText}>Tekrar Gönder</Text>
           </TouchableOpacity>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.pendingActionButton}
             onPress={() => handleCopyInviteLink(student)}
           >
             <Copy size={16} color={Colors.info} />
             <Text style={[styles.pendingActionText, { color: Colors.info }]}>Linki Kopyala</Text>
           </TouchableOpacity>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.pendingActionButton}
             onPress={() => handleShareInvite(student)}
           >
@@ -207,14 +249,14 @@ export default function StudentsScreen() {
     );
   };
 
-  const renderStudent = (student: Student) => {
+  const renderStudent = (student: StudentItem) => {
     const program = PROGRAMS.find(p => p.id === student.program);
-    const breakdown = calculateCommissionBreakdown(student, ambassadorId);
-    
+    const stage = student.stage as StudentStage;
+
     return (
-      <TouchableOpacity 
-        key={student.id} 
-        style={styles.studentCard} 
+      <TouchableOpacity
+        key={student.id}
+        style={styles.studentCard}
         activeOpacity={0.7}
         onPress={() => router.push(`/students/${student.id}`)}
       >
@@ -229,12 +271,12 @@ export default function StudentsScreen() {
             <View style={styles.studentMeta}>
               <View style={styles.metaItem}>
                 <MapPin size={12} color={Colors.textSecondary} />
-                <Text style={styles.metaText}>{student.country || 'USA'}</Text>
+                <Text style={styles.metaText}>{student.country || '-'}</Text>
               </View>
               <View style={styles.metaItem}>
                 <Calendar size={12} color={Colors.textSecondary} />
                 <Text style={styles.metaText}>
-                  {new Date(student.registeredAt).toLocaleDateString('tr-TR')}
+                  {new Date(student.createdAt).toLocaleDateString('tr-TR')}
                 </Text>
               </View>
             </View>
@@ -244,21 +286,21 @@ export default function StudentsScreen() {
 
         <View style={styles.studentBody}>
           <View style={styles.programBadge}>
-            <Text style={styles.programText}>{program?.name || student.program}</Text>
+            <Text style={styles.programText}>{program?.name || student.programName}</Text>
           </View>
-          
+
           <View style={styles.stageProgress}>
-            {STAGES.map((stage, index) => {
-              const stageIndex = STAGES.indexOf(student.stage);
+            {STAGES.map((s, index) => {
+              const stageIndex = STAGES.indexOf(stage);
               const isCompleted = index <= stageIndex;
               const isCurrent = index === stageIndex;
-              
+
               return (
-                <View key={stage} style={styles.stageProgressItem}>
+                <View key={s} style={styles.stageProgressItem}>
                   <View
                     style={[
                       styles.stageDot,
-                      isCompleted && { backgroundColor: Colors.stages[student.stage] },
+                      isCompleted && { backgroundColor: Colors.stages[stage] },
                       isCurrent && styles.stageDotCurrent,
                     ]}
                   />
@@ -266,7 +308,7 @@ export default function StudentsScreen() {
                     <View
                       style={[
                         styles.stageLine,
-                        isCompleted && index < stageIndex && { backgroundColor: Colors.stages[student.stage] },
+                        isCompleted && index < stageIndex && { backgroundColor: Colors.stages[stage] },
                       ]}
                     />
                   )}
@@ -274,29 +316,34 @@ export default function StudentsScreen() {
               );
             })}
           </View>
-          
-          <View style={[styles.currentStageBadge, { backgroundColor: Colors.stages[student.stage] + '20' }]}>
-            <View style={[styles.currentStageDot, { backgroundColor: Colors.stages[student.stage] }]} />
-            <Text style={[styles.currentStageText, { color: Colors.stages[student.stage] }]}>
-              {STAGE_LABELS[student.stage].tr}
+
+          <View style={[styles.currentStageBadge, { backgroundColor: (Colors.stages[stage] || '#9CA3AF') + '20' }]}>
+            <View style={[styles.currentStageDot, { backgroundColor: Colors.stages[stage] || '#9CA3AF' }]} />
+            <Text style={[styles.currentStageText, { color: Colors.stages[stage] || '#9CA3AF' }]}>
+              {STAGE_LABELS[stage]?.tr || stage}
             </Text>
           </View>
         </View>
 
         <View style={styles.studentFooter}>
-          <TouchableOpacity style={styles.contactButton}>
+          <TouchableOpacity
+            style={styles.contactButton}
+            onPress={() => Linking.openURL(`tel:${student.phone}`)}
+          >
             <Phone size={16} color={Colors.primary} />
             <Text style={styles.contactButtonText}>İletişim</Text>
           </TouchableOpacity>
           <View style={styles.commissionInfo}>
-            <Text style={styles.commissionLabel}>Kazanılan:</Text>
-            <Text style={styles.commissionValue}>${breakdown.earnedCommissionUSD}</Text>
-            <Text style={styles.commissionValueTRY}>₺{(breakdown.earnedCommissionUSD * exchangeRate).toLocaleString('tr-TR')}</Text>
+            <Text style={styles.commissionLabel}>Program:</Text>
+            <Text style={styles.commissionValue}>{student.programName}</Text>
           </View>
         </View>
       </TouchableOpacity>
     );
   };
+
+  const isLoading = studentsQuery.isLoading || allStudentsQuery.isLoading;
+  const isRefreshing = studentsQuery.isRefetching || allStudentsQuery.isRefetching;
 
   return (
     <View style={styles.container}>
@@ -307,6 +354,21 @@ export default function StudentsScreen() {
         <Text style={styles.headerTitle}>Öğrenciler</Text>
         <Text style={styles.headerSubtitle}>Pipeline takibi</Text>
       </LinearGradient>
+
+      <View style={styles.searchContainer}>
+        <View style={styles.searchInputWrapper}>
+          <Search size={18} color={Colors.textMuted} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Öğrenci ara..."
+            placeholderTextColor={Colors.textMuted}
+            value={searchText}
+            onChangeText={setSearchText}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+        </View>
+      </View>
 
       <View style={styles.filtersContainer}>
         <ScrollView
@@ -331,7 +393,7 @@ export default function StudentsScreen() {
               Tümü ({allStudents.length})
             </Text>
           </TouchableOpacity>
-          
+
           {pendingKvkkStudents.length > 0 && (
             <TouchableOpacity
               style={[
@@ -352,7 +414,7 @@ export default function StudentsScreen() {
               </Text>
             </TouchableOpacity>
           )}
-          
+
           {STAGES.map((stage) => (
             <TouchableOpacity
               key={stage}
@@ -381,16 +443,33 @@ export default function StudentsScreen() {
         style={styles.content}
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={onRefresh}
+            tintColor={Colors.primary}
+            colors={[Colors.primary]}
+          />
+        }
       >
-        {filteredStudents.length > 0 ? (
-          filteredStudents.map(student => 
-            student.invitationStatus === 'pending_kvkk' 
+        {isLoading ? (
+          <View style={styles.loadingState}>
+            <ActivityIndicator size="large" color={Colors.primary} />
+            <Text style={styles.loadingText}>Yükleniyor...</Text>
+          </View>
+        ) : filteredStudents.length > 0 ? (
+          filteredStudents.map(student =>
+            student.invitationStatus === 'pending_kvkk'
               ? renderPendingStudent(student)
               : renderStudent(student)
           )
         ) : (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyStateText}>Bu aşamada öğrenci yok</Text>
+            <UserPlus size={48} color={Colors.textMuted} />
+            <Text style={styles.emptyStateTitle}>Henüz öğrenci eklenmemiş</Text>
+            <Text style={styles.emptyStateText}>
+              Dashboard&apos;dan yeni öğrenci ekleyerek başlayın
+            </Text>
           </View>
         )}
         <View style={{ height: 20 }} />
@@ -410,13 +489,33 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 28,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     color: Colors.text,
     marginBottom: 4,
   },
   headerSubtitle: {
     fontSize: 14,
     color: Colors.textSecondary,
+  },
+  searchContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  searchInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingHorizontal: 12,
+    gap: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: Colors.text,
+    paddingVertical: 12,
   },
   filtersContainer: {
     backgroundColor: Colors.background,
@@ -446,7 +545,7 @@ const styles = StyleSheet.create({
   filterChipText: {
     fontSize: 13,
     color: Colors.textSecondary,
-    fontWeight: '500',
+    fontWeight: '500' as const,
   },
   filterChipTextActive: {
     color: Colors.text,
@@ -461,6 +560,16 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     padding: 16,
+  },
+  loadingState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: Colors.textSecondary,
   },
   studentCard: {
     backgroundColor: Colors.surface,
@@ -486,7 +595,7 @@ const styles = StyleSheet.create({
   },
   studentInitial: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: Colors.text,
   },
   studentHeaderInfo: {
@@ -494,7 +603,7 @@ const styles = StyleSheet.create({
   },
   studentName: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: Colors.text,
     marginBottom: 4,
   },
@@ -524,7 +633,7 @@ const styles = StyleSheet.create({
   },
   programText: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: Colors.secondary,
   },
   stageProgress: {
@@ -573,7 +682,7 @@ const styles = StyleSheet.create({
   },
   currentStageText: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '600' as const,
   },
   studentFooter: {
     flexDirection: 'row',
@@ -592,7 +701,7 @@ const styles = StyleSheet.create({
   },
   contactButtonText: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: Colors.primary,
   },
   commissionInfo: {
@@ -610,19 +719,22 @@ const styles = StyleSheet.create({
     fontWeight: '700' as const,
     color: Colors.secondary,
   },
-  commissionValueTRY: {
-    fontSize: 12,
-    color: Colors.textMuted,
-  },
   emptyState: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 60,
+    gap: 12,
+  },
+  emptyStateTitle: {
+    fontSize: 18,
+    fontWeight: '600' as const,
+    color: Colors.text,
   },
   emptyStateText: {
-    fontSize: 16,
+    fontSize: 14,
     color: Colors.textSecondary,
+    textAlign: 'center',
   },
   pendingCard: {
     backgroundColor: Colors.surface,
@@ -638,7 +750,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   pendingAvatarContainer: {
-    position: 'relative',
+    position: 'relative' as const,
     marginRight: 12,
   },
   pendingAvatar: {
@@ -655,7 +767,7 @@ const styles = StyleSheet.create({
     color: Colors.warning,
   },
   pendingBadge: {
-    position: 'absolute',
+    position: 'absolute' as const,
     bottom: -2,
     right: -2,
     width: 20,
