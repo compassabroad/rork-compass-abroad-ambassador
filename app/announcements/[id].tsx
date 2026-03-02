@@ -27,7 +27,7 @@ export default function AnnouncementDetailScreen() {
 
   const { token } = useAuth();
 
-  const announcementQuery = trpc.announcements.getById.useQuery(
+  const announcementQuery = trpc.notifications.getAnnouncementById.useQuery(
     { token: token || '', announcementId: id || '' },
     { enabled: !!token && !!id }
   );

@@ -27,7 +27,7 @@ export default function AnnouncementsScreen() {
   const router = useRouter();
   const { token } = useAuth();
 
-  const announcementsQuery = trpc.announcements.list.useQuery(
+  const announcementsQuery = trpc.notifications.listAnnouncements.useQuery(
     { token: token || '' },
     { enabled: !!token }
   );

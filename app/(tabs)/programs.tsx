@@ -116,7 +116,7 @@ export default function ProgramsScreen() {
   const insets = useSafeAreaInsets();
   const { rate: exchangeRate } = useExchangeRate();
 
-  const programsQuery = trpc.programs.list.useQuery();
+  const programsQuery = trpc.students.listPrograms.useQuery();
   const programs = (programsQuery.data ?? []) as Program[];
 
   const totalCommission = programs.reduce((sum, p) => sum + p.commission, 0);

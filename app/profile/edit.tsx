@@ -89,16 +89,16 @@ export default function ProfileEditScreen() {
   const originalLastName = user?.lastName || '';
   const tcIdentity = user?.tcIdentity || '';
 
-  const bankAccountsQuery = trpc.bankAccounts.list.useQuery(
+  const bankAccountsQuery = trpc.profile.listBankAccounts.useQuery(
     { token: token || '' },
     { enabled: !!token }
   );
 
   const profileUpdateMutation = trpc.profile.update.useMutation();
   const nameChangeMutation = trpc.profile.requestNameChange.useMutation();
-  const addBankMutation = trpc.bankAccounts.add.useMutation();
-  const setBankDefaultMutation = trpc.bankAccounts.setDefault.useMutation();
-  const deleteBankMutation = trpc.bankAccounts.delete.useMutation();
+  const addBankMutation = trpc.profile.addBankAccount.useMutation();
+  const setBankDefaultMutation = trpc.profile.setBankAccountDefault.useMutation();
+  const deleteBankMutation = trpc.profile.deleteBankAccount.useMutation();
 
   React.useEffect(() => {
     if (bankAccountsQuery.data) {

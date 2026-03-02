@@ -86,7 +86,7 @@ export default function StudentAddModal({ visible, onClose, onSubmit }: StudentA
   const [showSuccess, setShowSuccess] = useState(false);
   const [submittedEmail, setSubmittedEmail] = useState('');
   const { user } = useAuth();
-  const programsQuery = trpc.programs.list.useQuery();
+  const programsQuery = trpc.students.listPrograms.useQuery();
   const PROGRAMS = programsQuery.data ?? [];
 
   const sendInvitationMutation = trpc.email.sendStudentInvitation.useMutation({

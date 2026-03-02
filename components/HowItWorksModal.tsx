@@ -45,7 +45,7 @@ const PIPELINE_STAGES = [
 
 export default function HowItWorksModal({ visible, onClose }: HowItWorksModalProps) {
   const insets = useSafeAreaInsets();
-  const programsQuery = trpc.programs.list.useQuery(undefined, { enabled: visible });
+  const programsQuery = trpc.students.listPrograms.useQuery(undefined, { enabled: visible });
   const PROGRAMS = programsQuery.data ?? [];
 
   const handleClose = async () => {

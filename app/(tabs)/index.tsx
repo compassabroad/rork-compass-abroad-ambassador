@@ -65,17 +65,17 @@ export default function DashboardScreen() {
   const { links: socialLinks } = useSocialMedia();
   const { user, token } = useAuth();
 
-  const statsQuery = trpc.dashboard.getStats.useQuery(
+  const statsQuery = trpc.finances.getStats.useQuery(
     { token: token ?? '' },
     { enabled: !!token }
   );
 
-  const earningsQuery = trpc.dashboard.getEarnings.useQuery(
+  const earningsQuery = trpc.finances.getEarnings.useQuery(
     { token: token ?? '' },
     { enabled: !!token }
   );
 
-  const recentStudentsQuery = trpc.dashboard.getRecentStudents.useQuery(
+  const recentStudentsQuery = trpc.finances.getRecentStudents.useQuery(
     { token: token ?? '' },
     { enabled: !!token }
   );
@@ -93,7 +93,7 @@ export default function DashboardScreen() {
     },
   });
 
-  const withdrawalMutation = trpc.withdrawal.create.useMutation({
+  const withdrawalMutation = trpc.finances.createWithdrawal.useMutation({
     onSuccess: (data) => {
       Alert.alert('Başarılı', data.message);
       earningsQuery.refetch();

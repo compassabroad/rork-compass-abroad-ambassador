@@ -57,7 +57,7 @@ export default function TeamManagementScreen() {
   const router = useRouter();
   const { token } = useAuth();
   const teamQuery = trpc.team.list.useQuery({ token: token || '' }, { enabled: !!token });
-  const programsQuery = trpc.programs.list.useQuery();
+  const programsQuery = trpc.students.listPrograms.useQuery();
   const PROGRAMS = programsQuery.data ?? [];
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
 

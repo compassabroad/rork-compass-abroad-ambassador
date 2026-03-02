@@ -34,6 +34,15 @@ interface NotificationRecord {
   created_at: string;
 }
 
+interface AnnouncementRecord {
+  id: string;
+  title: string;
+  preview: string;
+  content: string;
+  image_url: string | null;
+  created_at: string;
+}
+
 export const notificationsRouter = createTRPCRouter({
   list: publicProcedure
     .input(z.object({ token: z.string() }))
@@ -92,5 +101,52 @@ export const notificationsRouter = createTRPCRouter({
       );
 
       return { unreadCount: result[0]?.count ?? 0 };
+    }),
+
+  listAnnouncements: publicProcedure
+    .input(z.object({ token: z.string() }))
+    .query(async ({ input }) => {
+      console.log("[Announcements] Fetching all announcements");
+      validateToken(input.token);
+
+      const announcements = await dbQuery<AnnouncementRecord>(
+        `SELECT * FROM announcements ORDER BY created_at DESC;`
+      );
+
+      return announcements.map((a) => ({
+        id: typeof a.id === "string" && a.id.includes(":") ? a.id.split(":")[1] : a.id,
+        title: a.title,
+        preview: a.preview,
+        content: a.content,
+        date: a.created_at,
+        imageUrl: a.image_url,
+        read: false,
+      }));
+    }),
+
+  getAnnouncementById: publicProcedure
+    .input(z.object({ token: z.string(), announcementId: z.string() }))
+    .query(async ({ input }) => {
+      console.log("[Announcements] Fetching announcement:", input.announcementId);
+      validateToken(input.token);
+
+      const results = await dbQuery<AnnouncementRecord>(
+        `SELECT * FROM announcements WHERE id = 'announcements:${input.announcementId}' OR id = '${input.announcementId}' LIMIT 1;`
+      );
+
+      if (results.length === 0) {
+        throw new Error("Duyuru bulunamadı");
+      }
+
+      const a = results[0];
+      return {
+        id: typeof a.id === "string" && a.id.includes(":") ? a.id.split(":")[1] : a.id,
+        title: a.title,
+        preview: a.preview,
+        content: a.content,
+        date: a.created_at,
+        imageUrl: a.image_url,
+        read: true,
+      };
     }),
 });

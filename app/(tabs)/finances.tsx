@@ -100,7 +100,7 @@ export default function FinancesScreen() {
     { enabled: !!token }
   );
 
-  const withdrawalMutation = trpc.withdrawal.create.useMutation({
+  const withdrawalMutation = trpc.finances.createWithdrawal.useMutation({
     onSuccess: (data) => {
       setShowPaymentModal(false);
       overviewQuery.refetch();

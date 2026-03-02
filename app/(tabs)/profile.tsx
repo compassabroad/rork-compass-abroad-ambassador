@@ -86,12 +86,12 @@ export default function ProfileScreen() {
   const [ibanError, setIbanError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
 
-  const bankAccountsQuery = trpc.bankAccounts.list.useQuery(
+  const bankAccountsQuery = trpc.profile.listBankAccounts.useQuery(
     { token: token || '' },
     { enabled: !!token }
   );
 
-  const addBankMutation = trpc.bankAccounts.add.useMutation({
+  const addBankMutation = trpc.profile.addBankAccount.useMutation({
     onSuccess: () => {
       bankAccountsQuery.refetch();
       setShowAddBankModal(false);
@@ -110,7 +110,7 @@ export default function ProfileScreen() {
     },
   });
 
-  const setDefaultMutation = trpc.bankAccounts.setDefault.useMutation({
+  const setDefaultMutation = trpc.profile.setBankAccountDefault.useMutation({
     onSuccess: () => {
       bankAccountsQuery.refetch();
       if (Platform.OS !== 'web') {
@@ -122,7 +122,7 @@ export default function ProfileScreen() {
     },
   });
 
-  const deleteBankMutation = trpc.bankAccounts.delete.useMutation({
+  const deleteBankMutation = trpc.profile.deleteBankAccount.useMutation({
     onSuccess: () => {
       bankAccountsQuery.refetch();
       if (Platform.OS !== 'web') {

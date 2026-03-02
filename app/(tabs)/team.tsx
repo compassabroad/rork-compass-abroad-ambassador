@@ -69,7 +69,7 @@ export default function TeamScreen() {
     Linking.openURL(whatsappUrl).catch(err => console.log('Error opening WhatsApp:', err));
   }, []);
 
-  const programsQuery = trpc.programs.list.useQuery();
+  const programsQuery = trpc.students.listPrograms.useQuery();
   const PROGRAMS = useMemo(() => programsQuery.data ?? [], [programsQuery.data]);
 
   const getProgramName = useCallback((programId: string): string => {

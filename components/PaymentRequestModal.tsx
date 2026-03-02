@@ -62,7 +62,7 @@ export default function PaymentRequestModal({ visible, onClose, onSubmit }: Paym
 
   const { user, token } = useAuth();
 
-  const bankAccountsQuery = trpc.bankAccounts.list.useQuery(
+  const bankAccountsQuery = trpc.profile.listBankAccounts.useQuery(
     { token: token || '' },
     { enabled: !!token && visible }
   );

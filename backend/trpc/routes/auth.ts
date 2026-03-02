@@ -129,9 +129,9 @@ export const authRouter = createTRPCRouter({
         companyName: z.string().optional(),
         taxNumber: z.string().optional(),
         taxOffice: z.string().optional(),
-        kvkkConsent: z.literal(true, { error: "KVKK onayı gereklidir" }),
-        privacyPolicyConsent: z.literal(true, { error: "Gizlilik politikası onayı gereklidir" }),
-        termsConsent: z.literal(true, { error: "Kullanım koşulları onayı gereklidir" }),
+        kvkkConsent: z.literal(true, { message: "KVKK onayı gereklidir" }),
+        privacyPolicyConsent: z.literal(true, { message: "Gizlilik politikası onayı gereklidir" }),
+        termsConsent: z.literal(true, { message: "Kullanım koşulları onayı gereklidir" }),
         parentReferralCode: z.string().optional(),
       })
     )
