@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,7 +7,8 @@ import {
   TouchableOpacity,
   Animated,
   RefreshControl,
-  Image,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -33,6 +34,7 @@ import {
   Sparkles,
   MapPin,
   Calendar,
+  AlertTriangle,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 
@@ -44,15 +46,16 @@ import HowItWorksModal from '@/components/HowItWorksModal';
 import Colors from '@/constants/colors';
 import { useExchangeRate } from '@/contexts/ExchangeRateContext';
 import { useSocialMedia } from '@/contexts/SocialMediaContext';
-import { MOCK_STUDENTS, MOCK_CURRENT_AMBASSADOR, PROGRAMS } from '@/mocks/data';
-import { STAGE_LABELS, AMBASSADOR_TYPE_LABELS } from '@/types';
-import { calculateTotalEarnings } from '@/utils/commissionCalculator';
+import { useAuth } from '@/contexts/AuthContext';
+import { trpc } from '@/lib/trpc';
+import { STAGE_LABELS, AMBASSADOR_TYPE_LABELS, AmbassadorType, StudentStage } from '@/types';
 
 export default function DashboardScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
   const [fadeAnim] = useState(() => new Animated.Value(0));
+  const [pulseAnim] = useState(() => new Animated.Value(0.3));
   
   const [showStudentModal, setShowStudentModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -60,9 +63,53 @@ export default function DashboardScreen() {
   
   const { rate: exchangeRate, isLoading: isLoadingRate, fetchRate, formattedRate, lastUpdatedText } = useExchangeRate();
   const { links: socialLinks } = useSocialMedia();
+  const { user, token } = useAuth();
 
-  const ambassadorId = MOCK_CURRENT_AMBASSADOR.id;
-  const earnings = calculateTotalEarnings(MOCK_STUDENTS, ambassadorId);
+  const statsQuery = trpc.dashboard.getStats.useQuery(
+    { token: token ?? '' },
+    { enabled: !!token }
+  );
+
+  const earningsQuery = trpc.dashboard.getEarnings.useQuery(
+    { token: token ?? '' },
+    { enabled: !!token }
+  );
+
+  const recentStudentsQuery = trpc.dashboard.getRecentStudents.useQuery(
+    { token: token ?? '' },
+    { enabled: !!token }
+  );
+
+  const createStudentMutation = trpc.students.create.useMutation({
+    onSuccess: () => {
+      Alert.alert('Başarılı', 'Öğrenci başarıyla eklendi!');
+      statsQuery.refetch();
+      earningsQuery.refetch();
+      recentStudentsQuery.refetch();
+    },
+    onError: (error) => {
+      console.error('[Dashboard] Create student error:', error);
+      Alert.alert('Hata', error.message || 'Öğrenci eklenirken bir hata oluştu');
+    },
+  });
+
+  const withdrawalMutation = trpc.withdrawal.create.useMutation({
+    onSuccess: (data) => {
+      Alert.alert('Başarılı', data.message);
+      earningsQuery.refetch();
+    },
+    onError: (error) => {
+      console.error('[Dashboard] Withdrawal error:', error);
+      Alert.alert('Hata', error.message || 'Çekim talebi oluşturulurken bir hata oluştu');
+    },
+  });
+
+  const stats = statsQuery.data;
+  const earnings = earningsQuery.data;
+  const recentStudents = recentStudentsQuery.data ?? [];
+
+  const isDataLoading = statsQuery.isLoading || earningsQuery.isLoading || recentStudentsQuery.isLoading;
+  const hasError = statsQuery.isError || earningsQuery.isError || recentStudentsQuery.isError;
 
   const getGreeting = useMemo(() => {
     const hour = new Date().getHours();
@@ -83,17 +130,41 @@ export default function DashboardScreen() {
   }, []);
 
   const formattedJoinDate = useMemo(() => {
-    const date = new Date(MOCK_CURRENT_AMBASSADOR.joinedAt);
+    if (!user?.createdAt) return '';
+    const date = new Date(user.createdAt);
     return date.toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' });
-  }, []);
+  }, [user?.createdAt]);
 
-  const handleAddStudent = (student: NewStudent) => {
-    console.log('New student added:', student);
-  };
+  const ambassadorType = (user?.type ?? 'bronze') as AmbassadorType;
 
-  const handleWithdrawalRequest = (request: WithdrawalRequest) => {
-    console.log('Withdrawal request:', request);
-  };
+  const handleAddStudent = useCallback((student: NewStudent) => {
+    if (!token) return;
+    console.log('[Dashboard] Adding student via modal callback');
+    createStudentMutation.mutate({
+      token,
+      name: student.name,
+      email: student.email,
+      phone: student.phone,
+      program: student.program,
+      country: student.country,
+      notes: student.notes || undefined,
+    });
+  }, [token, createStudentMutation]);
+
+  const handleWithdrawalRequest = useCallback((request: WithdrawalRequest) => {
+    if (!token) return;
+    const amountUSD = request.currency === 'USD' ? request.amount : request.amount / exchangeRate;
+    const amountTRY = request.currency === 'TRY' ? request.amount : request.amount * exchangeRate;
+
+    withdrawalMutation.mutate({
+      token,
+      amountUSD,
+      amountTRY,
+      exchangeRate,
+      iban: request.iban,
+      bankName: request.bankName,
+    });
+  }, [token, exchangeRate, withdrawalMutation]);
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -102,6 +173,22 @@ export default function DashboardScreen() {
       useNativeDriver: true,
     }).start();
   }, [fadeAnim]);
+
+  useEffect(() => {
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 0.3, duration: 800, useNativeDriver: true }),
+      ])
+    );
+    if (isDataLoading) {
+      pulse.start();
+    } else {
+      pulse.stop();
+      pulseAnim.setValue(1);
+    }
+    return () => pulse.stop();
+  }, [isDataLoading, pulseAnim]);
 
   const handleSocialPress = async (url: string) => {
     try {
@@ -120,7 +207,18 @@ export default function DashboardScreen() {
   const onRefresh = async () => {
     setRefreshing(true);
     fetchRate();
-    setTimeout(() => setRefreshing(false), 1000);
+    await Promise.all([
+      statsQuery.refetch(),
+      earningsQuery.refetch(),
+      recentStudentsQuery.refetch(),
+    ]);
+    setRefreshing(false);
+  };
+
+  const handleRetry = () => {
+    statsQuery.refetch();
+    earningsQuery.refetch();
+    recentStudentsQuery.refetch();
   };
 
   const formatCurrency = (amount: number, currency: 'USD' | 'TRY') => {
@@ -130,7 +228,12 @@ export default function DashboardScreen() {
     return `₺${amount.toLocaleString('tr-TR')}`;
   };
 
-  const recentStudents = MOCK_STUDENTS.slice(0, 3);
+  const totalEarnedUSD = earnings?.totalEarnedUSD ?? 0;
+  const totalPendingUSD = earnings?.totalPendingUSD ?? 0;
+  const availableUSD = earnings?.availableUSD ?? 0;
+  const compassPoints = stats?.compassPoints ?? user?.compassPoints ?? 0;
+  const studentsReferred = stats?.studentsReferred ?? 0;
+  const subAmbassadorsCount = stats?.subAmbassadorsCount ?? 0;
 
   return (
     <View style={styles.container}>
@@ -157,7 +260,7 @@ export default function DashboardScreen() {
               >
                 <View style={styles.welcomeAvatar}>
                   <Text style={styles.welcomeAvatarText}>
-                    {MOCK_CURRENT_AMBASSADOR.firstName[0]}{MOCK_CURRENT_AMBASSADOR.lastName[0]}
+                    {(user?.firstName ?? 'C')[0]}{(user?.lastName ?? 'A')[0]}
                   </Text>
                 </View>
               </LinearGradient>
@@ -170,25 +273,29 @@ export default function DashboardScreen() {
                 <Sparkles size={18} color={Colors.secondary} />
               </View>
               <Text style={styles.welcomeNameText}>
-                {MOCK_CURRENT_AMBASSADOR.firstName} {MOCK_CURRENT_AMBASSADOR.lastName}
+                {user?.firstName ?? ''} {user?.lastName ?? ''}
               </Text>
               <Text style={styles.motivationalText}>{getMotivationalMessage}</Text>
               
               <View style={styles.welcomeMetaRow}>
-                <View style={[styles.ambassadorTypeBadge, { backgroundColor: AMBASSADOR_TYPE_LABELS[MOCK_CURRENT_AMBASSADOR.type].color + '25' }]}>
-                  <Award size={14} color={AMBASSADOR_TYPE_LABELS[MOCK_CURRENT_AMBASSADOR.type].color} />
-                  <Text style={[styles.ambassadorTypeBadgeText, { color: AMBASSADOR_TYPE_LABELS[MOCK_CURRENT_AMBASSADOR.type].color }]}>
-                    {AMBASSADOR_TYPE_LABELS[MOCK_CURRENT_AMBASSADOR.type].tr}
+                <View style={[styles.ambassadorTypeBadge, { backgroundColor: AMBASSADOR_TYPE_LABELS[ambassadorType].color + '25' }]}>
+                  <Award size={14} color={AMBASSADOR_TYPE_LABELS[ambassadorType].color} />
+                  <Text style={[styles.ambassadorTypeBadgeText, { color: AMBASSADOR_TYPE_LABELS[ambassadorType].color }]}>
+                    {AMBASSADOR_TYPE_LABELS[ambassadorType].tr}
                   </Text>
                 </View>
-                <View style={styles.metaItem}>
-                  <MapPin size={12} color={Colors.textMuted} />
-                  <Text style={styles.metaItemText}>{MOCK_CURRENT_AMBASSADOR.city}</Text>
-                </View>
-                <View style={styles.metaItem}>
-                  <Calendar size={12} color={Colors.textMuted} />
-                  <Text style={styles.metaItemText}>{formattedJoinDate}</Text>
-                </View>
+                {user?.city ? (
+                  <View style={styles.metaItem}>
+                    <MapPin size={12} color={Colors.textMuted} />
+                    <Text style={styles.metaItemText}>{user.city}</Text>
+                  </View>
+                ) : null}
+                {formattedJoinDate ? (
+                  <View style={styles.metaItem}>
+                    <Calendar size={12} color={Colors.textMuted} />
+                    <Text style={styles.metaItemText}>{formattedJoinDate}</Text>
+                  </View>
+                ) : null}
               </View>
             </View>
           </View>
@@ -219,6 +326,14 @@ export default function DashboardScreen() {
           />
         }
       >
+        {hasError && (
+          <TouchableOpacity style={styles.errorBanner} onPress={handleRetry}>
+            <AlertTriangle size={18} color={Colors.error} />
+            <Text style={styles.errorBannerText}>Veriler yüklenirken hata oluştu. Tekrar deneyin.</Text>
+            <RefreshCw size={16} color={Colors.error} />
+          </TouchableOpacity>
+        )}
+
         <View style={styles.earningsCard}>
           <LinearGradient
             colors={[Colors.surfaceElevated, Colors.surface]}
@@ -229,43 +344,46 @@ export default function DashboardScreen() {
                 <DollarSign size={24} color={Colors.secondary} />
               </View>
               <Text style={styles.earningsTitle}>Toplam Kazanç</Text>
+              {earningsQuery.isLoading && (
+                <ActivityIndicator size="small" color={Colors.secondary} style={{ marginLeft: 8 }} />
+              )}
             </View>
             
-            <View style={styles.earningsAmounts}>
+            <Animated.View style={[styles.earningsAmounts, earningsQuery.isLoading && { opacity: pulseAnim }]}>
               <View style={styles.earningsRow}>
                 <Text style={styles.earningsCurrency}>USD</Text>
-                <Text style={styles.earningsValue}>{formatCurrency(earnings.totalEarnedUSD, 'USD')}</Text>
+                <Text style={styles.earningsValue}>{formatCurrency(totalEarnedUSD, 'USD')}</Text>
               </View>
               <View style={styles.earningsDivider} />
               <View style={styles.earningsRow}>
                 <Text style={styles.earningsCurrency}>TRY</Text>
-                <Text style={styles.earningsValueTRY}>{formatCurrency(earnings.totalEarnedUSD * exchangeRate, 'TRY')}</Text>
+                <Text style={styles.earningsValueTRY}>{formatCurrency(totalEarnedUSD * exchangeRate, 'TRY')}</Text>
               </View>
-            </View>
+            </Animated.View>
 
             <View style={styles.earningsFooter}>
               <View style={styles.earningsSubItem}>
                 <Clock size={14} color={Colors.warning} />
                 <Text style={styles.earningsSubLabel}>Bekleyen</Text>
-                <Text style={styles.earningsSubValue}>{formatCurrency(earnings.totalPendingUSD, 'USD')} / {formatCurrency(earnings.totalPendingUSD * exchangeRate, 'TRY')}</Text>
+                <Text style={styles.earningsSubValue}>{formatCurrency(totalPendingUSD, 'USD')} / {formatCurrency(totalPendingUSD * exchangeRate, 'TRY')}</Text>
               </View>
               <View style={styles.earningsSubItem}>
                 <TrendingUp size={14} color={Colors.success} />
                 <Text style={styles.earningsSubLabel}>Çekilebilir</Text>
                 <Text style={[styles.earningsSubValue, { color: Colors.success }]}>
-                  {formatCurrency(earnings.availableUSD, 'USD')}
+                  {formatCurrency(availableUSD, 'USD')}
                 </Text>
               </View>
             </View>
           </LinearGradient>
         </View>
 
-        <View style={styles.statsRow}>
+        <Animated.View style={[styles.statsRow, statsQuery.isLoading && { opacity: pulseAnim }]}>
           <View style={[styles.statCard, { backgroundColor: Colors.primary + '20' }]}>
             <View style={[styles.statIcon, { backgroundColor: Colors.primary }]}>
               <Star size={20} color={Colors.secondary} />
             </View>
-            <Text style={styles.statValue}>{MOCK_CURRENT_AMBASSADOR.compassPoints}</Text>
+            <Text style={styles.statValue}>{compassPoints}</Text>
             <Text style={styles.statLabel}>Compass Points</Text>
           </View>
           
@@ -273,7 +391,7 @@ export default function DashboardScreen() {
             <View style={[styles.statIcon, { backgroundColor: Colors.success }]}>
               <Users size={20} color={Colors.text} />
             </View>
-            <Text style={styles.statValue}>{MOCK_CURRENT_AMBASSADOR.studentsReferred}</Text>
+            <Text style={styles.statValue}>{studentsReferred}</Text>
             <Text style={styles.statLabel}>Öğrenci</Text>
           </View>
           
@@ -281,10 +399,10 @@ export default function DashboardScreen() {
             <View style={[styles.statIcon, { backgroundColor: Colors.info }]}>
               <Users size={20} color={Colors.text} />
             </View>
-            <Text style={styles.statValue}>{MOCK_CURRENT_AMBASSADOR.subAmbassadors.length}</Text>
+            <Text style={styles.statValue}>{subAmbassadorsCount}</Text>
             <Text style={styles.statLabel}>Alt Elçi</Text>
           </View>
-        </View>
+        </Animated.View>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Bizi Takip Edin</Text>
@@ -343,33 +461,48 @@ export default function DashboardScreen() {
               <ChevronRight size={16} color={Colors.secondary} />
             </TouchableOpacity>
           </View>
-          
-          {recentStudents.map((student) => {
-            const program = PROGRAMS.find(p => p.id === student.program);
-            return (
-              <TouchableOpacity 
-                key={student.id} 
-                style={styles.studentCard}
-                onPress={() => router.push(`/students/${student.id}`)}
-              >
-                <View style={styles.studentAvatar}>
-                  <Text style={styles.studentInitial}>
-                    {student.name.split(' ').map(n => n[0]).join('')}
-                  </Text>
-                </View>
-                <View style={styles.studentInfo}>
-                  <Text style={styles.studentName}>{student.name}</Text>
-                  <Text style={styles.studentProgram}>{program?.name || student.program}</Text>
-                </View>
-                <View style={[styles.stageBadge, { backgroundColor: Colors.stages[student.stage] + '30' }]}>
-                  <Text style={[styles.stageText, { color: Colors.stages[student.stage] }]}>
-                    {STAGE_LABELS[student.stage].tr}
-                  </Text>
-                </View>
-                <ArrowUpRight size={18} color={Colors.textMuted} />
-              </TouchableOpacity>
-            );
-          })}
+
+          {recentStudentsQuery.isLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color={Colors.secondary} />
+              <Text style={styles.loadingText}>Öğrenciler yükleniyor...</Text>
+            </View>
+          ) : recentStudents.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Users size={32} color={Colors.textMuted} />
+              <Text style={styles.emptyText}>Henüz öğrenci eklenmemiş</Text>
+              <Text style={styles.emptySubtext}>İlk öğrencinizi eklemek için aşağıdaki butonu kullanın</Text>
+            </View>
+          ) : (
+            recentStudents.map((student) => {
+              const stage = student.stage as StudentStage;
+              const stageInfo = STAGE_LABELS[stage];
+              const stageColor = Colors.stages[stage] || Colors.textMuted;
+              return (
+                <TouchableOpacity 
+                  key={student.id} 
+                  style={styles.studentCard}
+                  onPress={() => router.push(`/students/${student.id}`)}
+                >
+                  <View style={styles.studentAvatar}>
+                    <Text style={styles.studentInitial}>
+                      {student.name.split(' ').map((n: string) => n[0]).join('')}
+                    </Text>
+                  </View>
+                  <View style={styles.studentInfo}>
+                    <Text style={styles.studentName}>{student.name}</Text>
+                    <Text style={styles.studentProgram}>{student.programName}</Text>
+                  </View>
+                  <View style={[styles.stageBadge, { backgroundColor: stageColor + '30' }]}>
+                    <Text style={[styles.stageText, { color: stageColor }]}>
+                      {stageInfo?.tr ?? stage}
+                    </Text>
+                  </View>
+                  <ArrowUpRight size={18} color={Colors.textMuted} />
+                </TouchableOpacity>
+              );
+            })
+          )}
         </View>
 
         <View style={{ height: 20 }} />
@@ -597,6 +730,22 @@ const styles = StyleSheet.create({
   contentContainer: {
     paddingHorizontal: 16,
   },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: Colors.error + '15',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: Colors.error + '30',
+  },
+  errorBannerText: {
+    flex: 1,
+    fontSize: 13,
+    color: Colors.error,
+  },
   earningsCard: {
     borderRadius: 20,
     overflow: 'hidden',
@@ -624,7 +773,7 @@ const styles = StyleSheet.create({
   },
   earningsTitle: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: Colors.text,
   },
   earningsAmounts: {
@@ -639,16 +788,16 @@ const styles = StyleSheet.create({
   earningsCurrency: {
     fontSize: 14,
     color: Colors.textSecondary,
-    fontWeight: '500',
+    fontWeight: '500' as const,
   },
   earningsValue: {
     fontSize: 28,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     color: Colors.secondary,
   },
   earningsValueTRY: {
     fontSize: 22,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: Colors.text,
   },
   earningsDivider: {
@@ -674,7 +823,7 @@ const styles = StyleSheet.create({
   },
   earningsSubValue: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: Colors.text,
   },
   statsRow: {
@@ -698,14 +847,14 @@ const styles = StyleSheet.create({
   },
   statValue: {
     fontSize: 20,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     color: Colors.text,
     marginBottom: 4,
   },
   statLabel: {
     fontSize: 11,
     color: Colors.textSecondary,
-    textAlign: 'center',
+    textAlign: 'center' as const,
   },
   section: {
     marginBottom: 24,
@@ -718,7 +867,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     color: Colors.text,
   },
   seeAllButton: {
@@ -729,7 +878,7 @@ const styles = StyleSheet.create({
   seeAllText: {
     fontSize: 14,
     color: Colors.secondary,
-    fontWeight: '500',
+    fontWeight: '500' as const,
   },
   socialCard: {
     flexDirection: 'row',
@@ -778,7 +927,7 @@ const styles = StyleSheet.create({
   },
   studentInitial: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: Colors.text,
   },
   studentInfo: {
@@ -786,7 +935,7 @@ const styles = StyleSheet.create({
   },
   studentName: {
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: Colors.text,
     marginBottom: 2,
   },
@@ -802,7 +951,7 @@ const styles = StyleSheet.create({
   },
   stageText: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: '600' as const,
   },
   quickActionsContainer: {
     position: 'absolute',
@@ -838,7 +987,42 @@ const styles = StyleSheet.create({
   },
   quickActionText: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: Colors.text,
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    padding: 24,
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    padding: 32,
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    gap: 8,
+  },
+  emptyText: {
+    fontSize: 15,
+    fontWeight: '600' as const,
+    color: Colors.text,
+    marginTop: 8,
+  },
+  emptySubtext: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+    textAlign: 'center' as const,
   },
 });
