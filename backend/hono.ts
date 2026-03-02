@@ -22,11 +22,14 @@ app.use(
 
 app.post("/setup", async (c) => {
   const { dbQuery, dbQueryMultiple, nowISO } = await import("../lib/db");
-  const crypto = await import("crypto");
   const results: { step: string; success: boolean; message: string }[] = [];
 
-  function hashPassword(password: string): string {
-    return crypto.createHash('sha256').update(password + 'compass-salt-2024').digest('hex');
+  async function hashPassword(password: string): Promise<string> {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(password + 'compass-salt-2024');
+    const hashBuffer = await globalThis.crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
   try {
@@ -232,8 +235,8 @@ CREATE programs:masters SET name = 'Yüksek Lisans', name_en = 'Masters', descri
 
     if (!adminExists) {
       const now = nowISO();
-      const adminHash = hashPassword("CompAdmin2024!");
-      const testHash = hashPassword("Test1234!");
+      const adminHash = await hashPassword("CompAdmin2024!");
+      const testHash = await hashPassword("Test1234!");
       const SEED_AMBASSADORS_SQL = `
 CREATE ambassadors:admin1 SET email = 'admin@compassabroad.com', password_hash = '${adminHash}', first_name = 'Admin', last_name = 'Compass', phone = '+90 212 555 0000', city = 'Istanbul', type = 'diamond', category = 'individual', sub_type = 'other', company_name = NONE, tax_number = NONE, tax_office = NONE, parent_id = NONE, referral_code = 'CA-ADMIN1', account_status = 'active', role = 'admin', compass_points = 0, network_commission_rate = 10, kvkk_consent = true, kvkk_consent_date = '${now}', privacy_policy_consent = true, terms_consent = true, profile_photo = NONE, pending_first_name = NONE, pending_last_name = NONE, name_change_request_date = NONE, birth_date = NONE, tc_identity = NONE, created_at = '${now}', updated_at = '${now}';
 CREATE ambassadors:test1 SET email = 'test@compassabroad.com', password_hash = '${testHash}', first_name = 'Deniz', last_name = 'Aydin', phone = '+90 532 987 6543', city = 'Istanbul', type = 'gold', category = 'individual', sub_type = 'other', company_name = NONE, tax_number = NONE, tax_office = NONE, parent_id = NONE, referral_code = 'CA-7X9K2M', account_status = 'active', role = 'ambassador', compass_points = 4820, network_commission_rate = 10, kvkk_consent = true, kvkk_consent_date = '2023-06-15T00:00:00Z', privacy_policy_consent = true, terms_consent = true, profile_photo = NONE, pending_first_name = NONE, pending_last_name = NONE, name_change_request_date = NONE, birth_date = '1990-05-15', tc_identity = '12345678901', created_at = '2023-06-15T00:00:00Z', updated_at = '${now}';

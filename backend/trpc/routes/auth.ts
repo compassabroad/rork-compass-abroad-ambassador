@@ -150,7 +150,7 @@ export const authRouter = createTRPCRouter({
         throw new Error("Kurumsal hesaplar için şirket adı zorunludur");
       }
 
-      const passwordHash = hashPassword(input.password);
+      const passwordHash = await hashPassword(input.password);
 
       let referralCode = generateReferralCode();
       let codeExists = true;
@@ -257,7 +257,7 @@ export const authRouter = createTRPCRouter({
         }
 
         const ambassador = results[0];
-        const inputHash = hashPassword(input.password);
+        const inputHash = await hashPassword(input.password);
 
         if (ambassador.password_hash !== inputHash) {
           console.log("[Auth] Password mismatch for:", input.email);
@@ -427,13 +427,13 @@ export const authRouter = createTRPCRouter({
       }
 
       const ambassador = results[0];
-      const currentHash = hashPassword(input.currentPassword);
+      const currentHash = await hashPassword(input.currentPassword);
 
       if (ambassador.password_hash !== currentHash) {
         throw new Error("Mevcut şifre hatalı");
       }
 
-      const newHash = hashPassword(input.newPassword);
+      const newHash = await hashPassword(input.newPassword);
       const now = nowISO();
 
       await dbQueryMultiple(
@@ -575,7 +575,7 @@ export const authRouter = createTRPCRouter({
         throw new Error("Sıfırlama kodunun süresi dolmuş. Lütfen yeni kod talep edin.");
       }
 
-      const newHash = hashPassword(input.newPassword);
+      const newHash = await hashPassword(input.newPassword);
       const now = nowISO();
 
       await dbQueryMultiple(

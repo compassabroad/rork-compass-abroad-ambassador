@@ -1,4 +1,3 @@
-import crypto from 'crypto';
 import { createTRPCRouter, publicProcedure } from "../create-context";
 import { dbQuery, dbQueryMultiple, nowISO } from "@/lib/db";
 
@@ -171,8 +170,12 @@ DEFINE FIELD IF NOT EXISTS phone ON team_members TYPE string;
 DEFINE FIELD IF NOT EXISTS created_at ON team_members TYPE string DEFAULT time::now();
 `;
 
-function hashPassword(password: string): string {
-  return crypto.createHash('sha256').update(password + 'compass-salt-2024').digest('hex');
+async function hashPassword(password: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(password + 'compass-salt-2024');
+  const hashBuffer = await globalThis.crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 export { hashPassword };
@@ -309,10 +312,10 @@ CREATE programs:masters SET
   duration = '1-2 yıl';
 `;
 
-function getSeedAmbassadorsSQL(): string {
+async function getSeedAmbassadorsSQL(): Promise<string> {
   const now = nowISO();
-  const adminHash = hashPassword("CompAdmin2024!");
-  const testHash = hashPassword("Test1234!");
+  const adminHash = await hashPassword("CompAdmin2024!");
+  const testHash = await hashPassword("Test1234!");
 
   return `
 CREATE ambassadors:admin1 SET
@@ -432,7 +435,7 @@ export const dbSetupRouter = createTRPCRouter({
   seedAmbassadors: publicProcedure.mutation(async () => {
     console.log("[DB Setup] Seeding ambassadors...");
     try {
-      const sql = getSeedAmbassadorsSQL();
+      const sql = await getSeedAmbassadorsSQL();
       const results = await dbQueryMultiple(sql);
       const errors = results.filter((r) => r.status !== "OK");
       if (errors.length > 0) {
@@ -516,7 +519,7 @@ export const dbSetupRouter = createTRPCRouter({
       const existingAdmin = await dbQuery<{ id: string }>("SELECT id FROM ambassadors WHERE email = 'admin@compassabroad.com' LIMIT 1;");
       if (existingAdmin.length === 0) {
         console.log("[DB Setup] No admin found, seeding ambassadors...");
-        const ambassadorSQL = getSeedAmbassadorsSQL();
+        const ambassadorSQL = await getSeedAmbassadorsSQL();
         const ambassadorResults = await dbQueryMultiple(ambassadorSQL);
         const ambassadorErrors = ambassadorResults.filter((r) => r.status !== "OK");
         results.push({
@@ -532,7 +535,7 @@ export const dbSetupRouter = createTRPCRouter({
     } catch (error) {
       console.log("[DB Setup] Ambassadors table may not exist yet, seeding...");
       try {
-        const ambassadorSQL = getSeedAmbassadorsSQL();
+        const ambassadorSQL = await getSeedAmbassadorsSQL();
         const ambassadorResults = await dbQueryMultiple(ambassadorSQL);
         const ambassadorErrors = ambassadorResults.filter((r) => r.status !== "OK");
         results.push({
