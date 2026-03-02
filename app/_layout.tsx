@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import Colors from "@/constants/colors";
@@ -171,60 +171,55 @@ function RootLayoutNav() {
   );
 }
 
-function AppContent() {
-  const { isLoading } = useAuth();
-  const hasSeedChecked = useRef(false);
+function SeedManager() {
+  const [seedEnabled, setSeedEnabled] = useState<boolean>(true);
+
+  const statusQuery = trpc.dbSetup.checkStatus.useQuery(undefined, {
+    enabled: seedEnabled,
+    retry: 2,
+    retryDelay: 1000,
+  });
+
+  const seedMutation = trpc.dbSetup.seedAll.useMutation({
+    onSuccess: (data) => {
+      console.log('[App] DB seed result:', JSON.stringify(data));
+    },
+    onError: (err) => {
+      console.error('[App] DB seed mutation error:', err.message);
+    },
+  });
 
   useEffect(() => {
-    if (isLoading || hasSeedChecked.current) return;
-    hasSeedChecked.current = true;
+    if (!statusQuery.data || seedMutation.isPending || seedMutation.isSuccess) return;
 
-    const seedDb = async () => {
-      try {
-        const baseUrl = process.env.EXPO_PUBLIC_RORK_API_BASE_URL;
-        if (!baseUrl) return;
+    const tables = statusQuery.data.tables ?? [];
+    const programsTable = tables.find((t) => t.table === 'programs');
+    const ambassadorsTable = tables.find((t) => t.table === 'ambassadors');
 
-        console.log('[App] Checking DB seed status...');
-        const statusRes = await fetch(`${baseUrl}/api/trpc/dbSetup.checkStatus`, {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' },
-        });
+    const hasPrograms = programsTable && programsTable.count > 0;
+    const hasAmbassadors = ambassadorsTable && ambassadorsTable.count > 0;
 
-        if (statusRes.ok) {
-          const statusData = await statusRes.json();
-          const result = statusData?.result?.data;
-          if (result && result.programsCount > 0 && result.ambassadorsCount > 0) {
-            console.log('[App] DB already seeded:', result);
-            return;
-          }
-        }
+    if (hasPrograms && hasAmbassadors) {
+      console.log('[App] DB already seeded. Programs:', programsTable?.count, 'Ambassadors:', ambassadorsTable?.count);
+      setSeedEnabled(false);
+      return;
+    }
 
-        console.log('[App] Running DB seed...');
-        const seedRes = await fetch(`${baseUrl}/api/trpc/dbSetup.seedAll`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({}),
-        });
+    console.log('[App] DB needs seeding. Running seedAll...');
+    seedMutation.mutate();
+    setSeedEnabled(false);
+  }, [statusQuery.data]);
 
-        if (seedRes.ok) {
-          const seedData = await seedRes.json();
-          console.log('[App] DB seed result:', seedData?.result?.data);
-        } else {
-          console.error('[App] DB seed failed:', seedRes.status);
-        }
-      } catch (error) {
-        console.error('[App] DB seed error:', error);
-      }
-    };
+  return null;
+}
 
-    seedDb();
-  }, [isLoading]);
-
+function AppContent() {
   return (
     <ExchangeRateProvider>
       <SocialMediaProvider>
         <NotificationProvider>
           <ChatProvider>
+            <SeedManager />
             <StatusBar style="light" />
             <RootLayoutNav />
           </ChatProvider>
