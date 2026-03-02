@@ -76,15 +76,19 @@ export const [AuthProvider, useAuth] = createContextHook((): AuthState => {
   const fetchProfile = useCallback(async (authToken: string): Promise<AuthUser | null> => {
     try {
       console.log('[Auth] Fetching profile with token...');
-      const baseUrl = process.env.EXPO_PUBLIC_RORK_API_BASE_URL;
+      let baseUrl = process.env.EXPO_PUBLIC_RORK_API_BASE_URL;
       if (!baseUrl) {
-        console.error('[Auth] API base URL not configured');
-        return null;
+        if (typeof window !== 'undefined' && window.location?.origin) {
+          baseUrl = window.location.origin;
+        } else {
+          console.error('[Auth] API base URL not configured');
+          return null;
+        }
       }
 
       const inputPayload = { json: { token: authToken } };
       const response = await fetch(
-        `${baseUrl}/api/trpc/auth.me?input=${encodeURIComponent(JSON.stringify(inputPayload))}`,
+        `${baseUrl}/trpc/auth.me?input=${encodeURIComponent(JSON.stringify(inputPayload))}`,
         {
           method: 'GET',
           headers: {

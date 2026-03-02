@@ -28,8 +28,11 @@ import { useAuth } from '@/contexts/AuthContext';
 
 const getBaseUrl = () => {
   const url = process.env.EXPO_PUBLIC_RORK_API_BASE_URL;
-  if (!url) throw new Error('EXPO_PUBLIC_RORK_API_BASE_URL is not set');
-  return url;
+  if (url) return url;
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return window.location.origin;
+  }
+  return '';
 };
 
 export default function LoginScreen() {
@@ -47,7 +50,7 @@ export default function LoginScreen() {
     setIsSettingUp(true);
     Alert.alert('Veritabanı', 'Veritabanı hazırlanıyor...');
     try {
-      const res = await fetch(`${getBaseUrl()}/api/setup`, { method: 'POST' });
+      const res = await fetch(`${getBaseUrl()}/setup`, { method: 'POST' });
       const data = await res.json();
       console.log('[Setup] Response:', JSON.stringify(data));
       if (data.success) {
