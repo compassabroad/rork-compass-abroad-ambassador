@@ -11,7 +11,8 @@ import { teamRouter } from "./routes/team";
 import { adminRouter } from "./routes/admin";
 import { notificationsRouter } from "./routes/notifications";
 
-console.log("[Router] Creating app router...");
+console.log("[Router] Creating app router v3...");
+console.log("[Router] Registering routers: email, dbSetup, auth, students, network, profile, finances, chat, team, admin, notifications");
 
 export const appRouter = createTRPCRouter({
   email: emailRouter,
@@ -27,6 +28,6 @@ export const appRouter = createTRPCRouter({
   notifications: notificationsRouter,
 });
 
-console.log("[Router] App router created successfully");
+console.log("[Router] App router created successfully. Routes:", Object.keys(appRouter._def.procedures));
 
 export type AppRouter = typeof appRouter;
