@@ -1,17 +1,66 @@
-import * as postmark from "postmark";
+import { Client, SendEmailV3_1, LibraryResponse } from "node-mailjet";
 import * as z from "zod";
 
 import { createTRPCRouter, publicProcedure } from "../create-context";
 
-const getPostmarkClient = () => {
-  const apiKey = process.env.POSTMARK_API_KEY;
-  if (!apiKey) {
-    throw new Error("POSTMARK_API_KEY is not configured");
+const getMailjetClient = () => {
+  const apiKey = process.env.MAILJET_API_KEY;
+  const apiSecret = process.env.MAILJET_SECRET_KEY;
+  if (!apiKey || !apiSecret) {
+    throw new Error("MAILJET_API_KEY veya MAILJET_SECRET_KEY yapılandırılmamış");
   }
-  return new postmark.ServerClient(apiKey);
+  return new Client({
+    apiKey,
+    apiSecret,
+  });
 };
 
-const FROM_EMAIL = process.env.POSTMARK_FROM_EMAIL || "noreply@compassabroad.com.tr";
+const FROM_EMAIL = process.env.MAILJET_FROM_EMAIL || "noreply@compassabroad.com.tr";
+const FROM_NAME = process.env.MAILJET_FROM_NAME || "Compass Abroad";
+
+const sendEmail = async (params: {
+  to: string;
+  toName: string;
+  subject: string;
+  htmlBody: string;
+  textBody: string;
+}) => {
+  const client = getMailjetClient();
+
+  const data: SendEmailV3_1.Body = {
+    Messages: [
+      {
+        From: {
+          Email: FROM_EMAIL,
+          Name: FROM_NAME,
+        },
+        To: [
+          {
+            Email: params.to,
+            Name: params.toName,
+          },
+        ],
+        Subject: params.subject,
+        HTMLPart: params.htmlBody,
+        TextPart: params.textBody,
+      },
+    ],
+  };
+
+  const result: LibraryResponse<SendEmailV3_1.Response> = await client
+    .post("send", { version: "v3.1" })
+    .request(data);
+
+  const messageResult = result.body?.Messages?.[0];
+  console.log("[Email] Mailjet response status:", messageResult?.Status);
+
+  if (messageResult?.Status === "error") {
+    console.error("[Email] Mailjet error:", JSON.stringify(messageResult.Errors));
+    throw new Error("E-posta gönderilemedi");
+  }
+
+  return messageResult?.To?.[0]?.MessageID?.toString() ?? "unknown";
+};
 
 export const emailRouter = createTRPCRouter({
   sendStudentInvitation: publicProcedure
@@ -27,7 +76,6 @@ export const emailRouter = createTRPCRouter({
     .mutation(async ({ input }) => {
       console.log("[Email] Sending student invitation to:", input.studentEmail);
 
-      const client = getPostmarkClient();
       const baseUrl = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || "https://compassabroad.com.tr";
       const registrationLink = `${baseUrl}/student-registration/${input.invitationToken}`;
 
@@ -44,48 +92,38 @@ export const emailRouter = createTRPCRouter({
     <tr>
       <td align="center" style="padding: 40px 20px;">
         <table role="presentation" style="width: 100%; max-width: 600px; border-collapse: collapse; background-color: #ffffff; border-radius: 16px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-          <!-- Header -->
           <tr>
             <td style="padding: 40px 40px 20px; text-align: center; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border-radius: 16px 16px 0 0;">
               <h1 style="margin: 0; color: #D4AF37; font-size: 28px; font-weight: 700;">Compass Abroad</h1>
-              <p style="margin: 8px 0 0; color: #ffffff; font-size: 14px;">Yurt Dışı Eğitim Danışmanlığı</p>
+              <p style="margin: 8px 0 0; color: #ffffff; font-size: 14px;">Yurt Disi Egitim Danismanligi</p>
             </td>
           </tr>
-          
-          <!-- Content -->
           <tr>
             <td style="padding: 40px;">
               <h2 style="margin: 0 0 20px; color: #1a1a2e; font-size: 22px; font-weight: 600;">Merhaba ${input.studentName},</h2>
-              
               <p style="margin: 0 0 20px; color: #4a4a4a; font-size: 16px; line-height: 1.6;">
-                <strong>${input.ambassadorName}</strong> sizi <strong>${input.program}</strong> programı için Compass Abroad'a davet etti!
+                <strong>${input.ambassadorName}</strong> sizi <strong>${input.program}</strong> programi icin Compass Abroad'a davet etti!
               </p>
-              
               <p style="margin: 0 0 30px; color: #4a4a4a; font-size: 16px; line-height: 1.6;">
-                Hesabınızı oluşturmak ve yurt dışı eğitim yolculuğunuza başlamak için aşağıdaki butona tıklayın.
+                Hesabinizi olusturmak ve yurt disi egitim yolculugunuza baslamak icin asagidaki butona tiklayin.
               </p>
-              
-              <!-- CTA Button -->
               <table role="presentation" style="width: 100%; border-collapse: collapse;">
                 <tr>
                   <td align="center">
                     <a href="${registrationLink}" style="display: inline-block; padding: 16px 40px; background-color: #D4AF37; color: #1a1a2e; text-decoration: none; font-size: 16px; font-weight: 700; border-radius: 12px;">
-                      Hesabımı Oluştur
+                      Hesabimi Olustur
                     </a>
                   </td>
                 </tr>
               </table>
-              
               <p style="margin: 30px 0 0; color: #888888; font-size: 14px; line-height: 1.6;">
-                Buton çalışmıyorsa, aşağıdaki linki tarayıcınıza kopyalayın:
+                Buton calismiyorsa, asagidaki linki tarayiciniza kopyalayin:
               </p>
               <p style="margin: 8px 0 0; color: #D4AF37; font-size: 14px; word-break: break-all;">
                 ${registrationLink}
               </p>
             </td>
           </tr>
-          
-          <!-- Info Box -->
           <tr>
             <td style="padding: 0 40px 40px;">
               <table role="presentation" style="width: 100%; border-collapse: collapse; background-color: #f8f9fa; border-radius: 12px; border-left: 4px solid #D4AF37;">
@@ -93,22 +131,20 @@ export const emailRouter = createTRPCRouter({
                   <td style="padding: 20px;">
                     <p style="margin: 0 0 8px; color: #1a1a2e; font-size: 14px; font-weight: 600;">KVKK Bilgilendirmesi</p>
                     <p style="margin: 0; color: #666666; font-size: 13px; line-height: 1.5;">
-                      Kayıt işlemi sırasında kişisel verilerinizin işlenmesine ilişkin yasal metinleri onaylamanız gerekmektedir.
+                      Kayit islemi sirasinda kisisel verilerinizin islenmesine iliskin yasal metinleri onaylamaniz gerekmektedir.
                     </p>
                   </td>
                 </tr>
               </table>
             </td>
           </tr>
-          
-          <!-- Footer -->
           <tr>
             <td style="padding: 20px 40px; text-align: center; background-color: #f8f9fa; border-radius: 0 0 16px 16px;">
               <p style="margin: 0; color: #888888; font-size: 12px;">
-                Bu e-posta Compass Abroad tarafından gönderilmiştir.
+                Bu e-posta Compass Abroad tarafindan gonderilmistir.
               </p>
               <p style="margin: 8px 0 0; color: #888888; font-size: 12px;">
-                © ${new Date().getFullYear()} Compass Abroad. Tüm hakları saklıdır.
+                &copy; ${new Date().getFullYear()} Compass Abroad. Tum haklari saklidir.
               </p>
             </td>
           </tr>
@@ -123,37 +159,36 @@ export const emailRouter = createTRPCRouter({
       const textBody = `
 Merhaba ${input.studentName},
 
-${input.ambassadorName} sizi ${input.program} programı için Compass Abroad'a davet etti!
+${input.ambassadorName} sizi ${input.program} programi icin Compass Abroad'a davet etti!
 
-Hesabınızı oluşturmak için aşağıdaki linke tıklayın:
+Hesabinizi olusturmak icin asagidaki linke tiklayin:
 ${registrationLink}
 
 KVKK Bilgilendirmesi:
-Kayıt işlemi sırasında kişisel verilerinizin işlenmesine ilişkin yasal metinleri onaylamanız gerekmektedir.
+Kayit islemi sirasinda kisisel verilerinizin islenmesine iliskin yasal metinleri onaylamaniz gerekmektedir.
 
-Bu e-posta Compass Abroad tarafından gönderilmiştir.
-© ${new Date().getFullYear()} Compass Abroad. Tüm hakları saklıdır.
+Bu e-posta Compass Abroad tarafindan gonderilmistir.
+© ${new Date().getFullYear()} Compass Abroad. Tum haklari saklidir.
       `.trim();
 
       try {
-        const result = await client.sendEmail({
-          From: FROM_EMAIL,
-          To: input.studentEmail,
-          Subject: "Compass Abroad'a Davet Edildiniz!",
-          HtmlBody: htmlBody,
-          TextBody: textBody,
-          MessageStream: "outbound",
+        const messageId = await sendEmail({
+          to: input.studentEmail,
+          toName: input.studentName,
+          subject: "Compass Abroad'a Davet Edildiniz!",
+          htmlBody,
+          textBody,
         });
 
-        console.log("[Email] Invitation sent successfully:", result.MessageID);
+        console.log("[Email] Student invitation sent successfully:", messageId);
 
         return {
           success: true,
-          messageId: result.MessageID,
+          messageId,
         };
       } catch (error) {
-        console.error("[Email] Failed to send invitation:", error);
-        throw new Error("E-posta gönderilemedi. Lütfen tekrar deneyin.");
+        console.error("[Email] Failed to send student invitation:", error);
+        throw new Error("E-posta gonderilemedi. Lutfen tekrar deneyin.");
       }
     }),
 
@@ -169,7 +204,6 @@ Bu e-posta Compass Abroad tarafından gönderilmiştir.
     .mutation(async ({ input }) => {
       console.log("[Email] Sending ambassador invitation to:", input.inviteeEmail);
 
-      const client = getPostmarkClient();
       const baseUrl = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || "https://compassabroad.com.tr";
       const registrationLink = `${baseUrl}/ref/${input.referralCode}?type=ambassador`;
 
@@ -181,83 +215,71 @@ Bu e-posta Compass Abroad tarafından gönderilmiştir.
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Compass Abroad Elçi Programına Davet</title>
+  <title>Compass Abroad Elci Programina Davet</title>
 </head>
 <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f5f5f5;">
   <table role="presentation" style="width: 100%; border-collapse: collapse;">
     <tr>
       <td align="center" style="padding: 40px 20px;">
         <table role="presentation" style="width: 100%; max-width: 600px; border-collapse: collapse; background-color: #ffffff; border-radius: 16px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-          <!-- Header -->
           <tr>
             <td style="padding: 40px 40px 20px; text-align: center; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border-radius: 16px 16px 0 0;">
               <h1 style="margin: 0; color: #D4AF37; font-size: 28px; font-weight: 700;">Compass Abroad</h1>
-              <p style="margin: 8px 0 0; color: #ffffff; font-size: 14px;">Elçi Programı</p>
+              <p style="margin: 8px 0 0; color: #ffffff; font-size: 14px;">Elci Programi</p>
             </td>
           </tr>
-          
-          <!-- Content -->
           <tr>
             <td style="padding: 40px;">
               <h2 style="margin: 0 0 20px; color: #1a1a2e; font-size: 22px; font-weight: 600;">${greeting},</h2>
-              
               <p style="margin: 0 0 20px; color: #4a4a4a; font-size: 16px; line-height: 1.6;">
-                <strong>${input.inviterName}</strong> sizi Compass Abroad Elçi Programı'na davet ediyor!
+                <strong>${input.inviterName}</strong> sizi Compass Abroad Elci Programi'na davet ediyor!
               </p>
-              
               <p style="margin: 0 0 20px; color: #4a4a4a; font-size: 16px; line-height: 1.6;">
-                Elçi olarak öğrencileri yurt dışı eğitim programlarına yönlendirerek kazanç elde edebilirsiniz.
+                Elci olarak ogrencileri yurt disi egitim programlarina yonlendirerek kazanc elde edebilirsiniz.
               </p>
-              
-              <!-- Benefits -->
               <table role="presentation" style="width: 100%; border-collapse: collapse; margin: 20px 0;">
                 <tr>
                   <td style="padding: 12px 16px; background-color: #f8f9fa; border-radius: 8px; margin-bottom: 8px;">
-                    <p style="margin: 0; color: #1a1a2e; font-size: 14px;">✓ Program başına 150$ - 2.500$ komisyon</p>
+                    <p style="margin: 0; color: #1a1a2e; font-size: 14px;">&#10003; Program basina 150$ - 2.500$ komisyon</p>
                   </td>
                 </tr>
                 <tr><td style="height: 8px;"></td></tr>
                 <tr>
                   <td style="padding: 12px 16px; background-color: #f8f9fa; border-radius: 8px;">
-                    <p style="margin: 0; color: #1a1a2e; font-size: 14px;">✓ Alt elçilerinizin kazançlarından %10 komisyon</p>
+                    <p style="margin: 0; color: #1a1a2e; font-size: 14px;">&#10003; Alt elcilerinizin kazanclarindan %10 komisyon</p>
                   </td>
                 </tr>
                 <tr><td style="height: 8px;"></td></tr>
                 <tr>
                   <td style="padding: 12px 16px; background-color: #f8f9fa; border-radius: 8px;">
-                    <p style="margin: 0; color: #1a1a2e; font-size: 14px;">✓ Esnek çalışma imkanı</p>
+                    <p style="margin: 0; color: #1a1a2e; font-size: 14px;">&#10003; Esnek calisma imkani</p>
                   </td>
                 </tr>
               </table>
-              
-              <!-- CTA Button -->
               <table role="presentation" style="width: 100%; border-collapse: collapse; margin-top: 30px;">
                 <tr>
                   <td align="center">
                     <a href="${registrationLink}" style="display: inline-block; padding: 16px 40px; background-color: #8B5CF6; color: #ffffff; text-decoration: none; font-size: 16px; font-weight: 700; border-radius: 12px;">
-                      Elçi Olarak Başvur
+                      Elci Olarak Basvur
                     </a>
                   </td>
                 </tr>
               </table>
-              
               <p style="margin: 30px 0 0; color: #888888; font-size: 14px; line-height: 1.6;">
-                Buton çalışmıyorsa, aşağıdaki linki tarayıcınıza kopyalayın:
+                Buton calismiyorsa, asagidaki linki tarayiciniza kopyalayin:
               </p>
               <p style="margin: 8px 0 0; color: #8B5CF6; font-size: 14px; word-break: break-all;">
                 ${registrationLink}
               </p>
             </td>
           </tr>
-          
-          <!-- Footer -->
           <tr>
             <td style="padding: 20px 40px; text-align: center; background-color: #f8f9fa; border-radius: 0 0 16px 16px;">
               <p style="margin: 0; color: #888888; font-size: 12px;">
-                Bu e-posta Compass Abroad tarafından gönderilmiştir.
+                Bu e-posta Compass Abroad tarafindan gonderilmistir.
               </p>
               <p style="margin: 8px 0 0; color: #888888; font-size: 12px;">
-                © ${new Date().getFullYear()} Compass Abroad. Tüm hakları saklıdır.
+                &copy; ${new Date().getFullYear()} Compass Abroad. Tum haklari saklidir.
               </p>
             </td>
           </tr>
@@ -272,40 +294,39 @@ Bu e-posta Compass Abroad tarafından gönderilmiştir.
       const textBody = `
 ${greeting},
 
-${input.inviterName} sizi Compass Abroad Elçi Programı'na davet ediyor!
+${input.inviterName} sizi Compass Abroad Elci Programi'na davet ediyor!
 
-Elçi olarak öğrencileri yurt dışı eğitim programlarına yönlendirerek kazanç elde edebilirsiniz.
+Elci olarak ogrencileri yurt disi egitim programlarina yonlendirerek kazanc elde edebilirsiniz.
 
 Avantajlar:
-- Program başına 150$ - 2.500$ komisyon
-- Alt elçilerinizin kazançlarından %10 komisyon
-- Esnek çalışma imkanı
+- Program basina 150$ - 2.500$ komisyon
+- Alt elcilerinizin kazanclarindan %10 komisyon
+- Esnek calisma imkani
 
-Başvurmak için: ${registrationLink}
+Basvurmak icin: ${registrationLink}
 
-Bu e-posta Compass Abroad tarafından gönderilmiştir.
-© ${new Date().getFullYear()} Compass Abroad. Tüm hakları saklıdır.
+Bu e-posta Compass Abroad tarafindan gonderilmistir.
+© ${new Date().getFullYear()} Compass Abroad. Tum haklari saklidir.
       `.trim();
 
       try {
-        const result = await client.sendEmail({
-          From: FROM_EMAIL,
-          To: input.inviteeEmail,
-          Subject: "Compass Abroad Elçi Programına Davet!",
-          HtmlBody: htmlBody,
-          TextBody: textBody,
-          MessageStream: "outbound",
+        const messageId = await sendEmail({
+          to: input.inviteeEmail,
+          toName: input.inviteeName || "Elci Adayi",
+          subject: "Compass Abroad Elci Programina Davet!",
+          htmlBody,
+          textBody,
         });
 
-        console.log("[Email] Ambassador invitation sent successfully:", result.MessageID);
+        console.log("[Email] Ambassador invitation sent successfully:", messageId);
 
         return {
           success: true,
-          messageId: result.MessageID,
+          messageId,
         };
       } catch (error) {
         console.error("[Email] Failed to send ambassador invitation:", error);
-        throw new Error("E-posta gönderilemedi. Lütfen tekrar deneyin.");
+        throw new Error("E-posta gonderilemedi. Lutfen tekrar deneyin.");
       }
     }),
 });
