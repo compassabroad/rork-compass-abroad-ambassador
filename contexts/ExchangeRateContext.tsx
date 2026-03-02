@@ -2,7 +2,7 @@ import { useCallback } from 'react';
 import createContextHook from '@nkzw/create-context-hook';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
-const DEFAULT_RATE = 43.20;
+const DEFAULT_RATE = 38.50;
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
 interface ExchangeRateState {

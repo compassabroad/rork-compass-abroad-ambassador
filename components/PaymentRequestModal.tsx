@@ -15,6 +15,7 @@ import { X, DollarSign, CreditCard, Building2, AlertCircle, CheckCircle, Chevron
 import Colors from '@/constants/colors';
 import { useExchangeRate } from '@/contexts/ExchangeRateContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { trpc } from '@/lib/trpc';
 import { SavedIban } from '@/types';
 
 interface PaymentRequestModalProps {
@@ -59,10 +60,31 @@ export default function PaymentRequestModal({ visible, onClose, onSubmit }: Paym
   
   const { rate: exchangeRate, formattedRate } = useExchangeRate();
 
-  const { user } = useAuth();
-  const availableUSD = 0;
+  const { user, token } = useAuth();
+
+  const bankAccountsQuery = trpc.bankAccounts.list.useQuery(
+    { token: token || '' },
+    { enabled: !!token && visible }
+  );
+
+  const overviewQuery = trpc.finances.getOverview.useQuery(
+    { token: token || '' },
+    { enabled: !!token && visible }
+  );
+
+  const availableUSD = overviewQuery.data?.availableUSD ?? 0;
   const availableTRY = availableUSD * exchangeRate;
-  const savedIbans = useMemo<SavedIban[]>(() => [], []);
+  const savedIbans = useMemo<SavedIban[]>(() => {
+    return (bankAccountsQuery.data ?? []).filter((a: any) => a.status === 'approved').map((a: any) => ({
+      id: a.id,
+      iban: a.iban,
+      bankName: a.bankName,
+      isDefault: a.isDefault,
+      status: a.status,
+      submittedAt: a.submittedAt,
+      approvedAt: a.approvedAt,
+    }));
+  }, [bankAccountsQuery.data]);
   const accountHolderName = user ? `${user.firstName} ${user.lastName}` : '';
 
   const selectedSavedIban = useMemo(() => {

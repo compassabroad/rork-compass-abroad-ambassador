@@ -29,6 +29,9 @@ function RootLayoutNav() {
     SplashScreen.hideAsync();
 
     const inAuthGroup = segments[0] === 'login' || segments[0] === 'auth' || segments[0] === 'onboarding';
+    const inStudentReg = segments[0] === 'student-registration';
+
+    if (inStudentReg) return;
 
     if (!isAuthenticated) {
       if (!inAuthGroup) {
@@ -49,6 +52,7 @@ function RootLayoutNav() {
         hasNavigated.current = true;
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoading, isAuthenticated, user?.accountStatus, segments]);
 
   return (
@@ -173,11 +177,12 @@ function RootLayoutNav() {
 
 function SeedManager() {
   const [seedEnabled, setSeedEnabled] = useState<boolean>(true);
+  const seedTriggered = useRef(false);
 
   const statusQuery = trpc.dbSetup.checkStatus.useQuery(undefined, {
     enabled: seedEnabled,
-    retry: 2,
-    retryDelay: 1000,
+    retry: 3,
+    retryDelay: 2000,
   });
 
   const seedMutation = trpc.dbSetup.seedAll.useMutation({
@@ -190,7 +195,7 @@ function SeedManager() {
   });
 
   useEffect(() => {
-    if (!statusQuery.data || seedMutation.isPending || seedMutation.isSuccess) return;
+    if (!statusQuery.data || seedTriggered.current) return;
 
     const tables = statusQuery.data.tables ?? [];
     const programsTable = tables.find((t) => t.table === 'programs');
@@ -206,9 +211,10 @@ function SeedManager() {
     }
 
     console.log('[App] DB needs seeding. Running seedAll...');
+    seedTriggered.current = true;
     seedMutation.mutate();
     setSeedEnabled(false);
-  }, [statusQuery.data]);
+  }, [statusQuery.data, seedMutation]);
 
   return null;
 }

@@ -70,7 +70,7 @@ export default function TeamScreen() {
   }, []);
 
   const programsQuery = trpc.programs.list.useQuery();
-  const PROGRAMS = programsQuery.data ?? [];
+  const PROGRAMS = useMemo(() => programsQuery.data ?? [], [programsQuery.data]);
 
   const getProgramName = useCallback((programId: string): string => {
     const program = PROGRAMS.find((p: any) => p.id === programId);

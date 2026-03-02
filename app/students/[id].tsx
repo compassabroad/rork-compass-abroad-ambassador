@@ -208,7 +208,6 @@ export default function StudentDetailScreen() {
               const isStageCompleted = pipelineEntry?.date != null || stageIndex < currentStageIndex;
               const isCurrent = stageName === student.stage;
               const stageInfo = STAGE_LABELS[stageName];
-              const isStageRejected = stageName === 'visa_rejected' || (isRejected && stageName === 'visa_approved');
               const commissionPercent = stageInfo?.commissionPercent || 0;
               
               if (stageName === 'visa_approved' && isRejected) {

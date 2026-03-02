@@ -108,6 +108,7 @@ DEFINE FIELD IF NOT EXISTS custom_commission_usd ON ambassador_commissions TYPE 
 DEFINE FIELD IF NOT EXISTS use_custom ON ambassador_commissions TYPE bool DEFAULT false;
 
 DEFINE TABLE IF NOT EXISTS conversations SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS ambassador_id ON conversations TYPE string;
 DEFINE FIELD IF NOT EXISTS participant_name ON conversations TYPE string;
 DEFINE FIELD IF NOT EXISTS participant_role ON conversations TYPE string;
 DEFINE FIELD IF NOT EXISTS last_message ON conversations TYPE string;
@@ -120,6 +121,8 @@ DEFINE FIELD IF NOT EXISTS conversation_id ON messages TYPE string;
 DEFINE FIELD IF NOT EXISTS sender_id ON messages TYPE string;
 DEFINE FIELD IF NOT EXISTS text ON messages TYPE string;
 DEFINE FIELD IF NOT EXISTS read ON messages TYPE bool DEFAULT false;
+DEFINE FIELD IF NOT EXISTS is_ticket ON messages TYPE option<bool>;
+DEFINE FIELD IF NOT EXISTS ticket_id ON messages TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS created_at ON messages TYPE string DEFAULT time::now();
 
 DEFINE TABLE IF NOT EXISTS notifications SCHEMAFULL;
@@ -156,6 +159,16 @@ DEFINE FIELD IF NOT EXISTS exchange_rate ON withdrawal_requests TYPE number;
 DEFINE FIELD IF NOT EXISTS status ON withdrawal_requests TYPE string DEFAULT 'pending';
 DEFINE FIELD IF NOT EXISTS created_at ON withdrawal_requests TYPE string DEFAULT time::now();
 DEFINE FIELD IF NOT EXISTS processed_at ON withdrawal_requests TYPE option<string>;
+
+DEFINE TABLE IF NOT EXISTS team_members SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS name ON team_members TYPE string;
+DEFINE FIELD IF NOT EXISTS title ON team_members TYPE string;
+DEFINE FIELD IF NOT EXISTS expertise_areas ON team_members TYPE string;
+DEFINE FIELD IF NOT EXISTS languages ON team_members TYPE string;
+DEFINE FIELD IF NOT EXISTS availability ON team_members TYPE string DEFAULT 'available';
+DEFINE FIELD IF NOT EXISTS email ON team_members TYPE string;
+DEFINE FIELD IF NOT EXISTS phone ON team_members TYPE string;
+DEFINE FIELD IF NOT EXISTS created_at ON team_members TYPE string DEFAULT time::now();
 `;
 
 function hashPassword(password: string): string {
