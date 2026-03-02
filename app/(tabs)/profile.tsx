@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,8 @@ import {
   Share,
   Modal,
   Linking,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -21,7 +23,6 @@ import {
   Copy,
   Award,
   CreditCard,
-
   Check,
   LogOut,
   Bell,
@@ -42,9 +43,10 @@ import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 
 import Colors from '@/constants/colors';
-import { MOCK_CURRENT_AMBASSADOR } from '@/mocks/data';
+import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'expo-router';
-import { AMBASSADOR_TYPE_LABELS, AmbassadorType, SavedIban, BankAccountStatus } from '@/types';
+import { AMBASSADOR_TYPE_LABELS, AmbassadorType, BankAccountStatus } from '@/types';
+import { trpc } from '@/lib/trpc';
 
 const AMBASSADOR_TYPES: AmbassadorType[] = ['bronze', 'silver', 'gold', 'platinum', 'diamond'];
 
@@ -72,7 +74,7 @@ const STATUS_CONFIG: Record<BankAccountStatus, { label: string; color: string; i
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const [savedIbans, setSavedIbans] = useState<SavedIban[]>(MOCK_CURRENT_AMBASSADOR.savedIbans || []);
+  const { user, token, logout } = useAuth();
 
   const [notifications, setNotifications] = useState(true);
   const [language, setLanguage] = useState<'tr' | 'en'>('tr');
@@ -82,9 +84,71 @@ export default function ProfileScreen() {
   const [newBankName, setNewBankName] = useState('');
   const [showBankPicker, setShowBankPicker] = useState(false);
   const [ibanError, setIbanError] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
 
-  const referralLink = `https://compassabroad.com/ref/${MOCK_CURRENT_AMBASSADOR.referralCode}`;
+  const bankAccountsQuery = trpc.bankAccounts.list.useQuery(
+    { token: token || '' },
+    { enabled: !!token }
+  );
+
+  const addBankMutation = trpc.bankAccounts.add.useMutation({
+    onSuccess: () => {
+      bankAccountsQuery.refetch();
+      setShowAddBankModal(false);
+      resetAddBankForm();
+      if (Platform.OS !== 'web') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+      Alert.alert(
+        'Banka Hesabı Eklendi',
+        'Banka hesabınız Compass Abroad admin onayına gönderildi. Onaylandığında bildirim alacaksınız.',
+        [{ text: 'Tamam' }]
+      );
+    },
+    onError: (error) => {
+      Alert.alert('Hata', error.message || 'Banka hesabı eklenemedi');
+    },
+  });
+
+  const setDefaultMutation = trpc.bankAccounts.setDefault.useMutation({
+    onSuccess: () => {
+      bankAccountsQuery.refetch();
+      if (Platform.OS !== 'web') {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      }
+    },
+    onError: (error) => {
+      Alert.alert('Hata', error.message || 'Varsayılan hesap ayarlanamadı');
+    },
+  });
+
+  const deleteBankMutation = trpc.bankAccounts.delete.useMutation({
+    onSuccess: () => {
+      bankAccountsQuery.refetch();
+      if (Platform.OS !== 'web') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    },
+    onError: (error) => {
+      Alert.alert('Hata', error.message || 'Banka hesabı silinemedi');
+    },
+  });
+
+  const savedIbans = bankAccountsQuery.data || [];
+
+  const referralCode = user?.referralCode || 'CA-XXXXXX';
+  const referralLink = `https://compassabroad.com/ref/${referralCode}`;
   const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(referralLink)}&bgcolor=FFFFFF&color=502274`;
+
+  const userName = user ? `${user.firstName} ${user.lastName}` : '';
+  const userInitials = user ? `${user.firstName[0] || ''}${user.lastName[0] || ''}` : '';
+  const userType = (user?.type || 'bronze') as AmbassadorType;
+  const typeInfo = AMBASSADOR_TYPE_LABELS[userType];
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    bankAccountsQuery.refetch().finally(() => setRefreshing(false));
+  }, [bankAccountsQuery]);
 
   const copyReferralCode = async () => {
     if (Platform.OS !== 'web') {
@@ -154,18 +218,16 @@ export default function ProfileScreen() {
         { 
           text: 'Çıkış Yap', 
           style: 'destructive',
-          onPress: () => {
+          onPress: async () => {
             if (Platform.OS !== 'web') {
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             }
-            router.replace('/login');
+            await logout();
           }
         },
       ]
     );
   };
-
-
 
   const formatIbanDisplay = (iban: string) => {
     const cleaned = iban.replace(/\s/g, '');
@@ -241,38 +303,11 @@ export default function ProfileScreen() {
       return;
     }
 
-    const existingBank = savedIbans.find(
-      i => i.iban === newIban || (i.bankName === newBankName && i.status !== 'rejected')
-    );
-    if (existingBank) {
-      Alert.alert('Hata', 'Bu banka veya IBAN zaten kayıtlı');
-      return;
-    }
-
-    const isFirstAccount = savedIbans.filter(i => i.status === 'approved').length === 0;
-
-    const newAccount: SavedIban = {
-      id: Date.now().toString(),
+    addBankMutation.mutate({
+      token: token || '',
       iban: newIban,
       bankName: newBankName,
-      isDefault: isFirstAccount,
-      status: 'pending',
-      submittedAt: new Date().toISOString().split('T')[0],
-    };
-
-    setSavedIbans([...savedIbans, newAccount]);
-    setShowAddBankModal(false);
-    resetAddBankForm();
-
-    if (Platform.OS !== 'web') {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    }
-
-    Alert.alert(
-      'Banka Hesabı Eklendi',
-      'Banka hesabınız Compass Abroad admin onayına gönderildi. Onaylandığında bildirim alacaksınız.',
-      [{ text: 'Tamam' }]
-    );
+    });
   };
 
   const handleSetDefault = (ibanId: string) => {
@@ -282,14 +317,10 @@ export default function ProfileScreen() {
       return;
     }
 
-    setSavedIbans(savedIbans.map(iban => ({
-      ...iban,
-      isDefault: iban.id === ibanId,
-    })));
-
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    }
+    setDefaultMutation.mutate({
+      token: token || '',
+      bankAccountId: ibanId,
+    });
   };
 
   const handleDeleteBank = (ibanId: string) => {
@@ -308,18 +339,25 @@ export default function ProfileScreen() {
           text: 'Sil', 
           style: 'destructive',
           onPress: () => {
-            setSavedIbans(savedIbans.filter(i => i.id !== ibanId));
-            if (Platform.OS !== 'web') {
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            }
+            deleteBankMutation.mutate({
+              token: token || '',
+              bankAccountId: ibanId,
+            });
           }
         },
       ]
     );
   };
 
-  const typeInfo = AMBASSADOR_TYPE_LABELS[MOCK_CURRENT_AMBASSADOR.type];
   const pendingAccounts = savedIbans.filter(i => i.status === 'pending');
+
+  if (!user) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -328,9 +366,9 @@ export default function ProfileScreen() {
         style={[styles.header, { paddingTop: insets.top + 16 }]}
       >
         <View style={styles.profileHeader}>
-          {MOCK_CURRENT_AMBASSADOR.profilePhoto ? (
+          {user.profilePhoto ? (
             <View style={[styles.avatarContainer, { borderColor: typeInfo.color }]}>
-              <Image source={{ uri: MOCK_CURRENT_AMBASSADOR.profilePhoto }} style={styles.avatarImage} />
+              <Image source={{ uri: user.profilePhoto }} style={styles.avatarImage} />
               <View style={[styles.typeBadgeSmall, { backgroundColor: typeInfo.color }]}>
                 <Award size={12} color={Colors.background} />
               </View>
@@ -338,7 +376,7 @@ export default function ProfileScreen() {
           ) : (
             <View style={[styles.avatar, { borderColor: typeInfo.color }]}>
               <Text style={styles.avatarText}>
-                {MOCK_CURRENT_AMBASSADOR.name.split(' ').map(n => n[0]).join('')}
+                {userInitials}
               </Text>
               <View style={[styles.typeBadgeSmall, { backgroundColor: typeInfo.color }]}>
                 <Award size={12} color={Colors.background} />
@@ -347,7 +385,7 @@ export default function ProfileScreen() {
           )}
           <View style={styles.profileInfo}>
             <View style={styles.profileNameRow}>
-              <Text style={styles.profileName}>{MOCK_CURRENT_AMBASSADOR.name}</Text>
+              <Text style={styles.profileName}>{userName}</Text>
               <TouchableOpacity
                 style={styles.editButton}
                 onPress={() => router.push('/profile/edit')}
@@ -357,15 +395,15 @@ export default function ProfileScreen() {
                 <Feather name="edit-2" size={24} color="#FFD700" />
               </TouchableOpacity>
             </View>
-            {MOCK_CURRENT_AMBASSADOR.pendingFirstName && (
+            {user.profilePhoto === undefined && user.firstName && (user as any).pendingFirstName && (
               <View style={styles.pendingNameBadge}>
                 <Clock size={12} color={Colors.warning} />
                 <Text style={styles.pendingNameText}>
-                  İsim değişikliği bekliyor: {MOCK_CURRENT_AMBASSADOR.pendingFirstName} {MOCK_CURRENT_AMBASSADOR.pendingLastName}
+                  İsim değişikliği bekliyor: {(user as any).pendingFirstName} {(user as any).pendingLastName}
                 </Text>
               </View>
             )}
-            <Text style={styles.profileEmail}>{MOCK_CURRENT_AMBASSADOR.email}</Text>
+            <Text style={styles.profileEmail}>{user.email}</Text>
             <View style={styles.badgeRow}>
               <View style={[styles.typeBadge, { backgroundColor: typeInfo.color + '20' }]}>
                 <Text style={[styles.typeBadgeText, { color: typeInfo.color }]}>
@@ -390,6 +428,13 @@ export default function ProfileScreen() {
         style={styles.content}
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={Colors.primary}
+          />
+        }
       >
         <View style={styles.qrSection}>
           <View style={styles.qrContainer}>
@@ -400,7 +445,7 @@ export default function ProfileScreen() {
                 resizeMode="contain"
               />
             </View>
-            <Text style={styles.referralCode}>{MOCK_CURRENT_AMBASSADOR.referralCode}</Text>
+            <Text style={styles.referralCode}>{referralCode}</Text>
             <Text style={styles.referralLink}>{referralLink}</Text>
             <View style={styles.qrButtons}>
               <TouchableOpacity style={styles.qrButton} onPress={copyReferralCode}>
@@ -427,8 +472,8 @@ export default function ProfileScreen() {
           <View style={styles.tierContainer}>
             {AMBASSADOR_TYPES.map((type, index) => {
               const info = AMBASSADOR_TYPE_LABELS[type];
-              const isActive = type === MOCK_CURRENT_AMBASSADOR.type;
-              const isPast = AMBASSADOR_TYPES.indexOf(MOCK_CURRENT_AMBASSADOR.type) > index;
+              const isActive = type === userType;
+              const isPast = AMBASSADOR_TYPES.indexOf(userType) > index;
               
               return (
                 <View key={type} style={styles.tierItem}>
@@ -475,7 +520,12 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           </View>
 
-          {savedIbans.length === 0 ? (
+          {bankAccountsQuery.isLoading ? (
+            <View style={styles.emptyBankCard}>
+              <ActivityIndicator size="small" color={Colors.primary} />
+              <Text style={styles.emptyBankText}>Yükleniyor...</Text>
+            </View>
+          ) : savedIbans.length === 0 ? (
             <View style={styles.emptyBankCard}>
               <CreditCard size={32} color={Colors.textMuted} />
               <Text style={styles.emptyBankText}>Henüz banka hesabı eklenmemiş</Text>
@@ -489,7 +539,8 @@ export default function ProfileScreen() {
           ) : (
             <View style={styles.bankList}>
               {savedIbans.map((iban) => {
-                const statusConfig = STATUS_CONFIG[iban.status];
+                const statusKey = (iban.status as BankAccountStatus) || 'pending';
+                const statusConfig = STATUS_CONFIG[statusKey] || STATUS_CONFIG.pending;
                 const StatusIcon = statusConfig.icon;
                 
                 return (
@@ -720,12 +771,16 @@ export default function ProfileScreen() {
             <TouchableOpacity 
               style={[
                 styles.submitButton,
-                (!newBankName || newIban.length !== 26) && styles.submitButtonDisabled
+                (!newBankName || newIban.length !== 26 || addBankMutation.isPending) && styles.submitButtonDisabled
               ]}
               onPress={handleAddBank}
-              disabled={!newBankName || newIban.length !== 26}
+              disabled={!newBankName || newIban.length !== 26 || addBankMutation.isPending}
             >
-              <Text style={styles.submitButtonText}>Hesap Ekle</Text>
+              {addBankMutation.isPending ? (
+                <ActivityIndicator size="small" color={Colors.primaryDark} />
+              ) : (
+                <Text style={styles.submitButtonText}>Hesap Ekle</Text>
+              )}
             </TouchableOpacity>
           </View>
         </View>
@@ -759,7 +814,7 @@ const styles = StyleSheet.create({
   },
   avatarText: {
     fontSize: 24,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     color: Colors.text,
   },
   typeBadgeSmall: {
@@ -823,7 +878,7 @@ const styles = StyleSheet.create({
   },
   profileName: {
     fontSize: 22,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     color: Colors.text,
     marginBottom: 4,
   },
@@ -844,7 +899,7 @@ const styles = StyleSheet.create({
   },
   typeBadgeText: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '600' as const,
   },
   editProfileButton: {
     flexDirection: 'row',
@@ -855,7 +910,7 @@ const styles = StyleSheet.create({
   },
   editProfileButtonText: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: '#FFD700',
   },
   content: {
@@ -893,7 +948,7 @@ const styles = StyleSheet.create({
   },
   referralCode: {
     fontSize: 24,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     color: Colors.secondary,
     letterSpacing: 2,
     marginBottom: 6,
@@ -918,7 +973,7 @@ const styles = StyleSheet.create({
   },
   qrButtonText: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: Colors.text,
   },
   qrHint: {
@@ -940,7 +995,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: Colors.text,
     marginBottom: 12,
     marginLeft: 4,
@@ -956,7 +1011,7 @@ const styles = StyleSheet.create({
   },
   addBankButtonText: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: Colors.secondary,
   },
   tierContainer: {
@@ -990,7 +1045,7 @@ const styles = StyleSheet.create({
   tierLabel: {
     fontSize: 10,
     color: Colors.textMuted,
-    fontWeight: '500',
+    fontWeight: '500' as const,
   },
   tierLine: {
     position: 'absolute',
@@ -1024,7 +1079,7 @@ const styles = StyleSheet.create({
   },
   emptyBankButtonText: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: Colors.primaryDark,
   },
   bankList: {
@@ -1055,7 +1110,7 @@ const styles = StyleSheet.create({
   },
   bankName: {
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: Colors.text,
   },
   defaultBadge: {
@@ -1069,7 +1124,7 @@ const styles = StyleSheet.create({
   },
   defaultBadgeText: {
     fontSize: 10,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: Colors.secondary,
   },
   ibanNumber: {
@@ -1087,7 +1142,7 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: '600' as const,
   },
   bankCardActions: {
     flexDirection: 'row',
@@ -1111,7 +1166,7 @@ const styles = StyleSheet.create({
   },
   bankActionText: {
     fontSize: 12,
-    fontWeight: '500',
+    fontWeight: '500' as const,
     color: Colors.textSecondary,
   },
   pendingInfo: {
@@ -1165,12 +1220,7 @@ const styles = StyleSheet.create({
   settingLabel: {
     fontSize: 15,
     color: Colors.text,
-    fontWeight: '500',
-  },
-  settingSubtext: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    marginTop: 2,
+    fontWeight: '500' as const,
   },
   settingDivider: {
     height: 1,
@@ -1185,11 +1235,11 @@ const styles = StyleSheet.create({
   langOption: {
     fontSize: 14,
     color: Colors.textMuted,
-    fontWeight: '500',
+    fontWeight: '500' as const,
   },
   langOptionActive: {
     color: Colors.secondary,
-    fontWeight: '700',
+    fontWeight: '700' as const,
   },
   langDivider: {
     color: Colors.textMuted,
@@ -1206,7 +1256,7 @@ const styles = StyleSheet.create({
   },
   logoutText: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: Colors.error,
   },
   version: {
@@ -1229,7 +1279,7 @@ const styles = StyleSheet.create({
   },
   modalTitle: {
     fontSize: 20,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     color: Colors.text,
   },
   modalCloseButton: {
@@ -1255,7 +1305,7 @@ const styles = StyleSheet.create({
   },
   formLabel: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: Colors.text,
   },
   bankSelector: {
@@ -1301,7 +1351,7 @@ const styles = StyleSheet.create({
   },
   bankOptionTextSelected: {
     color: Colors.secondary,
-    fontWeight: '600',
+    fontWeight: '600' as const,
   },
   ibanInput: {
     backgroundColor: Colors.surface,
@@ -1352,7 +1402,7 @@ const styles = StyleSheet.create({
   },
   infoCardTitle: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: Colors.info,
     marginBottom: 4,
   },
@@ -1379,7 +1429,7 @@ const styles = StyleSheet.create({
   },
   cancelButtonText: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: Colors.textSecondary,
   },
   submitButton: {
@@ -1394,7 +1444,7 @@ const styles = StyleSheet.create({
   },
   submitButtonText: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     color: Colors.primaryDark,
   },
 });

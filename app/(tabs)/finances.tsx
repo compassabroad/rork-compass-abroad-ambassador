@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -28,16 +29,18 @@ import {
 import PaymentRequestModal, { WithdrawalRequest } from '@/components/PaymentRequestModal';
 import Colors from '@/constants/colors';
 import { useExchangeRate } from '@/contexts/ExchangeRateContext';
-import { MOCK_STUDENTS, MOCK_CURRENT_AMBASSADOR, PROGRAMS } from '@/mocks/data';
-import { TransactionType, TRANSACTION_TYPE_LABELS } from '@/types';
-import { calculateTotalEarnings, calculateCommissionBreakdown, getAmbassadorCommissionForProgram } from '@/utils/commissionCalculator';
+import { useAuth } from '@/contexts/AuthContext';
+import { trpc } from '@/lib/trpc';
+import { TRANSACTION_TYPE_LABELS } from '@/types';
 
-const getTransactionIcon = (type: TransactionType) => {
+const getTransactionIcon = (type: string) => {
   const iconProps = { size: 18, color: Colors.text };
   switch (type) {
     case 'student_registration':
+    case 'student_pre_payment':
       return <UserPlus {...iconProps} />;
     case 'student_program_selected':
+    case 'student_registered':
       return <BookOpen {...iconProps} />;
     case 'student_visa_approved':
       return <CheckCircle {...iconProps} />;
@@ -54,79 +57,86 @@ const getTransactionIcon = (type: TransactionType) => {
   }
 };
 
+const getTransactionLabel = (type: string): string => {
+  const labels = TRANSACTION_TYPE_LABELS as Record<string, { tr: string; en: string; icon: string }>;
+  if (labels[type]) {
+    return labels[type].tr;
+  }
+  if (type.startsWith('student_')) {
+    const stage = type.replace('student_', '');
+    const stageLabels: Record<string, string> = {
+      pre_payment: 'Ön Ödeme Komisyonu',
+      registered: 'Kayıt Komisyonu',
+      documents_completed: 'Belge Komisyonu',
+      visa_applied: 'Vize Başvuru Komisyonu',
+      visa_approved: 'Vize Onay Komisyonu',
+      departed: 'Uçuş Komisyonu',
+    };
+    return stageLabels[stage] || 'Komisyon';
+  }
+  return 'İşlem';
+};
+
 export default function FinancesScreen() {
   const insets = useSafeAreaInsets();
   const [refreshing, setRefreshing] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   
   const { rate: exchangeRate, fetchRate } = useExchangeRate();
+  const { token } = useAuth();
 
-  const ambassadorId = MOCK_CURRENT_AMBASSADOR.id;
-  const earnings = calculateTotalEarnings(MOCK_STUDENTS, ambassadorId);
+  const overviewQuery = trpc.finances.getOverview.useQuery(
+    { token: token || '' },
+    { enabled: !!token }
+  );
 
-  const transactions = MOCK_STUDENTS.flatMap((student) => {
-    const breakdown = calculateCommissionBreakdown(student, ambassadorId);
-    const txns: {
-      id: string;
-      type: TransactionType;
-      amountUSD: number;
-      date: string;
-      studentName: string;
-      studentId: string;
-      description: string;
-      status: 'completed' | 'pending';
-    }[] = [];
+  const transactionsQuery = trpc.finances.getTransactions.useQuery(
+    { token: token || '' },
+    { enabled: !!token }
+  );
 
-    if (breakdown.registrationEarned) {
-      txns.push({
-        id: `reg-${student.id}`,
-        type: 'student_registration',
-        amountUSD: breakdown.registrationCommissionUSD,
-        date: student.registeredAt,
-        studentName: student.name,
-        studentId: student.id,
-        description: `${student.name} - Kayıt Komisyonu`,
-        status: 'completed',
-      });
-    }
+  const programBreakdownQuery = trpc.finances.getCommissionsByProgram.useQuery(
+    { token: token || '' },
+    { enabled: !!token }
+  );
 
-    if (breakdown.visaApprovedEarned) {
-      txns.push({
-        id: `visa-${student.id}`,
-        type: 'student_visa_approved',
-        amountUSD: breakdown.visaApprovedCommissionUSD,
-        date: student.updatedAt,
-        studentName: student.name,
-        studentId: student.id,
-        description: `${student.name} - Vize Onay Komisyonu`,
-        status: 'completed',
-      });
-    }
+  const withdrawalMutation = trpc.withdrawal.create.useMutation({
+    onSuccess: (data) => {
+      setShowPaymentModal(false);
+      overviewQuery.refetch();
+      transactionsQuery.refetch();
+    },
+    onError: (error) => {
+      console.log('[Finances] Withdrawal error:', error.message);
+    },
+  });
 
-    if (breakdown.departedEarned) {
-      txns.push({
-        id: `dep-${student.id}`,
-        type: 'student_departed',
-        amountUSD: breakdown.departedCommissionUSD,
-        date: student.updatedAt,
-        studentName: student.name,
-        studentId: student.id,
-        description: `${student.name} - Uçuş Komisyonu`,
-        status: 'completed',
-      });
-    }
+  const overview = overviewQuery.data;
+  const transactions = transactionsQuery.data || [];
+  const programEarnings = programBreakdownQuery.data || [];
 
-    return txns;
-  }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-  const onRefresh = () => {
+  const onRefresh = useCallback(() => {
     setRefreshing(true);
     fetchRate();
-    setTimeout(() => setRefreshing(false), 1500);
-  };
+    Promise.all([
+      overviewQuery.refetch(),
+      transactionsQuery.refetch(),
+      programBreakdownQuery.refetch(),
+    ]).finally(() => setRefreshing(false));
+  }, [overviewQuery, transactionsQuery, programBreakdownQuery, fetchRate]);
 
   const handleWithdrawalRequest = (request: WithdrawalRequest) => {
-    console.log('Withdrawal request:', request);
+    if (!token) return;
+    const amountUSD = request.currency === 'USD' ? request.amount : request.amount / exchangeRate;
+    const amountTRY = request.currency === 'TRY' ? request.amount : request.amount * exchangeRate;
+    withdrawalMutation.mutate({
+      token,
+      iban: request.iban,
+      bankName: request.bankName,
+      amountUSD,
+      amountTRY,
+      exchangeRate,
+    });
   };
 
   const formatCurrency = (amount: number, currency: 'USD' | 'TRY') => {
@@ -144,20 +154,9 @@ export default function FinancesScreen() {
     });
   };
 
-  const programEarnings = PROGRAMS.map(program => {
-    const studentsInProgram = MOCK_STUDENTS.filter(s => s.program === program.id);
-    const earned = studentsInProgram.reduce((sum, s) => {
-      const breakdown = calculateCommissionBreakdown(s, ambassadorId);
-      return sum + breakdown.earnedCommissionUSD;
-    }, 0);
-    const ambassadorRate = getAmbassadorCommissionForProgram(ambassadorId, program.id);
-    return {
-      program,
-      earned,
-      count: studentsInProgram.length,
-      ambassadorRate,
-    };
-  }).filter(p => p.count > 0);
+  const totalEarnedUSD = overview?.totalEarnedUSD ?? 0;
+  const totalPendingUSD = overview?.totalPendingUSD ?? 0;
+  const availableUSD = overview?.availableUSD ?? 0;
 
   return (
     <View style={styles.container}>
@@ -193,43 +192,51 @@ export default function FinancesScreen() {
               <Text style={styles.summaryTitle}>Toplam Kazanç</Text>
             </View>
 
-            <View style={styles.summaryAmounts}>
-              <View style={styles.amountRow}>
-                <Text style={styles.amountLabel}>USD</Text>
-                <Text style={styles.amountValuePrimary}>{formatCurrency(earnings.totalEarnedUSD, 'USD')}</Text>
+            {overviewQuery.isLoading ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="small" color={Colors.primary} />
               </View>
-              <View style={styles.amountDivider} />
-              <View style={styles.amountRow}>
-                <Text style={styles.amountLabel}>TRY</Text>
-                <Text style={styles.amountValueSecondary}>{formatCurrency(earnings.totalEarnedUSD * exchangeRate, 'TRY')}</Text>
-              </View>
-            </View>
+            ) : (
+              <>
+                <View style={styles.summaryAmounts}>
+                  <View style={styles.amountRow}>
+                    <Text style={styles.amountLabel}>USD</Text>
+                    <Text style={styles.amountValuePrimary}>{formatCurrency(totalEarnedUSD, 'USD')}</Text>
+                  </View>
+                  <View style={styles.amountDivider} />
+                  <View style={styles.amountRow}>
+                    <Text style={styles.amountLabel}>TRY</Text>
+                    <Text style={styles.amountValueSecondary}>{formatCurrency(totalEarnedUSD * exchangeRate, 'TRY')}</Text>
+                  </View>
+                </View>
 
-            <View style={styles.summaryStats}>
-              <View style={styles.statItem}>
-                <View style={[styles.statIconContainer, { backgroundColor: Colors.success + '20' }]}>
-                  <TrendingUp size={16} color={Colors.success} />
-                </View>
-                <View>
-                  <Text style={styles.statLabel}>Çekilebilir</Text>
-                  <Text style={[styles.statValue, { color: Colors.success }]}>
-                    {formatCurrency(earnings.availableUSD, 'USD')} / {formatCurrency(earnings.availableUSD * exchangeRate, 'TRY')}
-                  </Text>
-                </View>
-              </View>
+                <View style={styles.summaryStats}>
+                  <View style={styles.statItem}>
+                    <View style={[styles.statIconContainer, { backgroundColor: Colors.success + '20' }]}>
+                      <TrendingUp size={16} color={Colors.success} />
+                    </View>
+                    <View>
+                      <Text style={styles.statLabel}>Çekilebilir</Text>
+                      <Text style={[styles.statValue, { color: Colors.success }]}>
+                        {formatCurrency(availableUSD, 'USD')} / {formatCurrency(availableUSD * exchangeRate, 'TRY')}
+                      </Text>
+                    </View>
+                  </View>
 
-              <View style={styles.statItem}>
-                <View style={[styles.statIconContainer, { backgroundColor: Colors.warning + '20' }]}>
-                  <Clock size={16} color={Colors.warning} />
+                  <View style={styles.statItem}>
+                    <View style={[styles.statIconContainer, { backgroundColor: Colors.warning + '20' }]}>
+                      <Clock size={16} color={Colors.warning} />
+                    </View>
+                    <View>
+                      <Text style={styles.statLabel}>Bekleyen</Text>
+                      <Text style={[styles.statValue, { color: Colors.warning }]}>
+                        {formatCurrency(totalPendingUSD, 'USD')} / {formatCurrency(totalPendingUSD * exchangeRate, 'TRY')}
+                      </Text>
+                    </View>
+                  </View>
                 </View>
-                <View>
-                  <Text style={styles.statLabel}>Bekleyen</Text>
-                  <Text style={[styles.statValue, { color: Colors.warning }]}>
-                    {formatCurrency(earnings.totalPendingUSD, 'USD')} / {formatCurrency(earnings.totalPendingUSD * exchangeRate, 'TRY')}
-                  </Text>
-                </View>
-              </View>
-            </View>
+              </>
+            )}
           </LinearGradient>
         </View>
 
@@ -253,54 +260,65 @@ export default function FinancesScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>İşlem Geçmişi</Text>
           
-          {transactions.map((transaction) => {
-            const isPositive = transaction.amountUSD > 0;
-            
-            return (
-              <TouchableOpacity key={transaction.id} style={styles.transactionCard} activeOpacity={0.7}>
-                <View style={[
-                  styles.transactionIcon,
-                  { backgroundColor: Colors.success + '20' }
-                ]}>
-                  {getTransactionIcon(transaction.type)}
-                </View>
-                
-                <View style={styles.transactionInfo}>
-                  <Text style={styles.transactionType}>
-                    {TRANSACTION_TYPE_LABELS[transaction.type].tr}
-                  </Text>
-                  <Text style={styles.transactionDescription} numberOfLines={1}>
-                    {transaction.description}
-                  </Text>
-                  <Text style={styles.transactionDate}>{formatDate(transaction.date)}</Text>
-                </View>
-                
-                <View style={styles.transactionAmounts}>
-                  <View style={styles.transactionAmountRow}>
-                    {isPositive ? (
-                      <ArrowDownLeft size={14} color={Colors.success} />
-                    ) : (
-                      <ArrowUpRight size={14} color={Colors.error} />
-                    )}
-                    <Text style={[
-                      styles.transactionAmountUSD,
-                      { color: isPositive ? Colors.success : Colors.error }
-                    ]}>
-                      {isPositive ? '+' : ''}{formatCurrency(transaction.amountUSD, 'USD')}
-                    </Text>
+          {transactionsQuery.isLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color={Colors.primary} />
+            </View>
+          ) : transactions.length === 0 ? (
+            <View style={styles.emptyState}>
+              <DollarSign size={32} color={Colors.textMuted} />
+              <Text style={styles.emptyStateText}>Henüz işlem bulunmuyor</Text>
+            </View>
+          ) : (
+            transactions.map((transaction) => {
+              const isPositive = transaction.type !== 'payment_withdrawal' && transaction.amountUSD > 0;
+              
+              return (
+                <TouchableOpacity key={transaction.id} style={styles.transactionCard} activeOpacity={0.7}>
+                  <View style={[
+                    styles.transactionIcon,
+                    { backgroundColor: isPositive ? Colors.success + '20' : Colors.error + '20' }
+                  ]}>
+                    {getTransactionIcon(transaction.type)}
                   </View>
-                  <Text style={styles.transactionAmountTRY}>
-                    {formatCurrency(transaction.amountUSD * exchangeRate, 'TRY')}
-                  </Text>
-                  {transaction.status === 'pending' && (
-                    <View style={styles.pendingBadge}>
-                      <Text style={styles.pendingText}>Bekliyor</Text>
+                  
+                  <View style={styles.transactionInfo}>
+                    <Text style={styles.transactionType}>
+                      {getTransactionLabel(transaction.type)}
+                    </Text>
+                    <Text style={styles.transactionDescription} numberOfLines={1}>
+                      {transaction.description}
+                    </Text>
+                    <Text style={styles.transactionDate}>{formatDate(transaction.createdAt)}</Text>
+                  </View>
+                  
+                  <View style={styles.transactionAmounts}>
+                    <View style={styles.transactionAmountRow}>
+                      {isPositive ? (
+                        <ArrowDownLeft size={14} color={Colors.success} />
+                      ) : (
+                        <ArrowUpRight size={14} color={Colors.error} />
+                      )}
+                      <Text style={[
+                        styles.transactionAmountUSD,
+                        { color: isPositive ? Colors.success : Colors.error }
+                      ]}>
+                        {isPositive ? '+' : '-'}{formatCurrency(transaction.amountUSD, 'USD')}
+                      </Text>
                     </View>
-                  )}
-                </View>
-              </TouchableOpacity>
-            );
-          })}
+                    <Text style={styles.transactionAmountTRY}>
+                      {formatCurrency(transaction.amountUSD * exchangeRate, 'TRY')}
+                    </Text>
+                    {transaction.status === 'pending' && (
+                      <View style={styles.pendingBadge}>
+                        <Text style={styles.pendingText}>Bekliyor</Text>
+                      </View>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              );
+            })
+          )}
         </View>
 
         {programEarnings.length > 0 && (
@@ -309,15 +327,15 @@ export default function FinancesScreen() {
             
             <View style={styles.programEarningsCard}>
               {programEarnings.map((item, index) => (
-                <View key={item.program.id}>
+                <View key={item.programId}>
                   <View style={styles.programEarningRow}>
                     <View style={styles.programInfo}>
-                      <Text style={styles.programName}>{item.program.name}</Text>
-                      <Text style={styles.programCount}>{item.count} öğrenci • Oranınız: ${item.ambassadorRate}</Text>
+                      <Text style={styles.programName}>{item.programName}</Text>
+                      <Text style={styles.programCount}>{item.studentCount} öğrenci</Text>
                     </View>
                     <View style={styles.programEarnedContainer}>
-                      <Text style={styles.programEarned}>{formatCurrency(item.earned, 'USD')}</Text>
-                      <Text style={styles.programEarnedTRY}>{formatCurrency(item.earned * exchangeRate, 'TRY')}</Text>
+                      <Text style={styles.programEarned}>{formatCurrency(item.earnedUSD, 'USD')}</Text>
+                      <Text style={styles.programEarnedTRY}>{formatCurrency(item.earnedUSD * exchangeRate, 'TRY')}</Text>
                     </View>
                   </View>
                   {index < programEarnings.length - 1 && <View style={styles.programDivider} />}
@@ -476,6 +494,23 @@ const styles = StyleSheet.create({
     color: Colors.text,
     marginBottom: 12,
   },
+  loadingContainer: {
+    padding: 24,
+    alignItems: 'center',
+  },
+  emptyState: {
+    backgroundColor: Colors.surface,
+    borderRadius: 14,
+    padding: 32,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  emptyStateText: {
+    fontSize: 14,
+    color: Colors.textMuted,
+    marginTop: 12,
+  },
   transactionCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -513,7 +548,7 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
   },
   transactionAmounts: {
-    alignItems: 'flex-end',
+    alignItems: 'flex-end' as const,
   },
   transactionAmountRow: {
     flexDirection: 'row',
