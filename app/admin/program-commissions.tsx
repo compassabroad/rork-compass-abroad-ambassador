@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, Stack } from 'expo-router';
@@ -16,6 +17,12 @@ import {
   RefreshCw,
   Save,
   TrendingUp,
+  ChevronDown,
+  ChevronUp,
+  Star,
+  Clock,
+  Globe,
+  FileText,
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -24,112 +31,139 @@ import { useExchangeRate } from '@/contexts/ExchangeRateContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { trpc } from '@/lib/trpc';
 
-
-interface CommissionState {
-  [key: string]: number;
+interface ProgramEditState {
+  commission: number;
+  points: number;
+  description: string;
+  duration: string;
+  countries: string;
 }
 
 export default function ProgramCommissionsScreen() {
   const router = useRouter();
   const { rate: exchangeRate, formattedRate } = useExchangeRate();
-
   const { token } = useAuth();
+
   const programCommissionsQuery = trpc.admin.getProgramCommissions.useQuery(
     { token: token || '' },
     { enabled: !!token }
   );
-  const updateMutation = trpc.admin.updateProgramCommission.useMutation();
+  const updateProgramMutation = trpc.admin.updateProgram.useMutation();
 
-  const programs = programCommissionsQuery.data ?? [];
+  const programs = React.useMemo(() => programCommissionsQuery.data ?? [], [programCommissionsQuery.data]);
 
-  const [commissions, setCommissions] = useState<CommissionState>({});
+  const [editStates, setEditStates] = useState<Record<string, ProgramEditState>>({});
+  const [expandedProgram, setExpandedProgram] = useState<string | null>(null);
+  const [hasChanges, setHasChanges] = useState(false);
 
   React.useEffect(() => {
     if (programs.length > 0) {
-      const initial: CommissionState = {};
+      const initial: Record<string, ProgramEditState> = {};
       programs.forEach((pc: any) => {
-        initial[pc.programId] = pc.defaultCommissionUSD;
+        initial[pc.programId] = {
+          commission: pc.defaultCommissionUSD,
+          points: pc.points ?? 0,
+          description: pc.description ?? '',
+          duration: pc.duration ?? '',
+          countries: Array.isArray(pc.countries) ? pc.countries.join(', ') : '',
+        };
       });
-      setCommissions(initial);
+      setEditStates(initial);
     }
   }, [programs]);
-  const [hasChanges, setHasChanges] = useState(false);
 
-  const handleCommissionChange = useCallback((programId: string, value: string) => {
-    const numValue = parseInt(value.replace(/[^0-9]/g, ''), 10) || 0;
-    setCommissions(prev => ({
+  const updateField = useCallback((programId: string, field: keyof ProgramEditState, value: string | number) => {
+    setEditStates(prev => ({
       ...prev,
-      [programId]: numValue,
+      [programId]: {
+        ...prev[programId],
+        [field]: value,
+      },
     }));
     setHasChanges(true);
   }, []);
 
   const handleSave = useCallback(() => {
-    Alert.alert(
-      'Değişiklikleri Kaydet',
-      'Komisyon oranlarını kaydetmek istediğinize emin misiniz?',
-      [
-        { text: 'İptal', style: 'cancel' },
-        {
-          text: 'Kaydet',
-          onPress: async () => {
-            try {
-              for (const [programId, amount] of Object.entries(commissions)) {
-                await updateMutation.mutateAsync({ token: token || '', programId, commissionUSD: amount });
-              }
-              setHasChanges(false);
-              programCommissionsQuery.refetch();
-              Alert.alert('Başarılı', 'Komisyon oranları kaydedildi.');
-            } catch (error: any) {
-              Alert.alert('Hata', error.message || 'Kaydetme başarısız');
+    Alert.alert('Değişiklikleri Kaydet', 'Tüm program bilgilerini kaydetmek istediğinize emin misiniz?', [
+      { text: 'İptal', style: 'cancel' },
+      {
+        text: 'Kaydet',
+        onPress: async () => {
+          try {
+            for (const [programId, state] of Object.entries(editStates)) {
+              await updateProgramMutation.mutateAsync({
+                token: token || '',
+                programId,
+                defaultCommissionUSD: state.commission,
+                points: state.points,
+                description: state.description,
+                duration: state.duration,
+                countries: state.countries.split(',').map(c => c.trim()).filter(Boolean),
+              });
             }
-          },
+            setHasChanges(false);
+            programCommissionsQuery.refetch();
+            Alert.alert('Başarılı', 'Program bilgileri kaydedildi.');
+          } catch (error: any) {
+            Alert.alert('Hata', error.message || 'Kaydetme başarısız');
+          }
         },
-      ]
-    );
-  }, [commissions, token, updateMutation, programCommissionsQuery]);
+      },
+    ]);
+  }, [editStates, token, updateProgramMutation, programCommissionsQuery]);
 
   const handleReset = useCallback(() => {
-    Alert.alert(
-      'Varsayılana Sıfırla',
-      'Tüm komisyon oranlarını varsayılan değerlere sıfırlamak istediğinize emin misiniz?',
-      [
-        { text: 'İptal', style: 'cancel' },
-        {
-          text: 'Sıfırla',
-          style: 'destructive',
-          onPress: () => {
-            const defaultCommissions: CommissionState = {};
-            programs.forEach((p: any) => {
-              defaultCommissions[p.programId] = p.defaultCommissionUSD;
-            });
-            setCommissions(defaultCommissions);
-            setHasChanges(true);
-          },
+    Alert.alert('Varsayılana Sıfırla', 'Tüm değişiklikleri geri almak istediğinize emin misiniz?', [
+      { text: 'İptal', style: 'cancel' },
+      {
+        text: 'Sıfırla',
+        style: 'destructive',
+        onPress: () => {
+          const initial: Record<string, ProgramEditState> = {};
+          programs.forEach((pc: any) => {
+            initial[pc.programId] = {
+              commission: pc.defaultCommissionUSD,
+              points: pc.points ?? 0,
+              description: pc.description ?? '',
+              duration: pc.duration ?? '',
+              countries: Array.isArray(pc.countries) ? pc.countries.join(', ') : '',
+            };
+          });
+          setEditStates(initial);
+          setHasChanges(false);
         },
-      ]
-    );
+      },
+    ]);
   }, [programs]);
 
-  const getProgramIcon = (iconName: string) => {
-    return <DollarSign color={Colors.secondary} size={20} />;
-  };
-
   const renderProgramItem = (program: any) => {
-    const currentCommission = commissions[program.programId] || program.defaultCommissionUSD;
-    const tryValue = currentCommission * exchangeRate;
+    const state = editStates[program.programId];
+    if (!state) return null;
+
+    const tryValue = state.commission * exchangeRate;
+    const isExpanded = expandedProgram === program.programId;
 
     return (
       <View key={program.programId} style={styles.programCard}>
-        <View style={styles.programHeader}>
+        <TouchableOpacity
+          style={styles.programHeader}
+          onPress={() => setExpandedProgram(isExpanded ? null : program.programId)}
+          activeOpacity={0.7}
+        >
           <View style={styles.programIconContainer}>
-            {getProgramIcon('')}
+            <DollarSign color={Colors.secondary} size={20} />
           </View>
           <View style={styles.programInfo}>
             <Text style={styles.programName}>{program.programName}</Text>
             <Text style={styles.programNameEn}>{program.programNameEn}</Text>
           </View>
-        </View>
+          {isExpanded ? (
+            <ChevronUp color={Colors.textMuted} size={20} />
+          ) : (
+            <ChevronDown color={Colors.textMuted} size={20} />
+          )}
+        </TouchableOpacity>
+
         <View style={styles.commissionInputs}>
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>USD</Text>
@@ -137,8 +171,11 @@ export default function ProgramCommissionsScreen() {
               <Text style={styles.currencyPrefix}>$</Text>
               <TextInput
                 style={styles.commissionInput}
-                value={currentCommission.toString()}
-                onChangeText={(value) => handleCommissionChange(program.programId, value)}
+                value={state.commission.toString()}
+                onChangeText={(value) => {
+                  const numValue = parseInt(value.replace(/[^0-9]/g, ''), 10) || 0;
+                  updateField(program.programId, 'commission', numValue);
+                }}
                 keyboardType="numeric"
                 testID={`commission-${program.programId}`}
               />
@@ -151,12 +188,75 @@ export default function ProgramCommissionsScreen() {
             <Text style={styles.inputLabel}>TRY</Text>
             <View style={[styles.inputWrapper, styles.tryWrapper]}>
               <Text style={styles.currencyPrefix}>₺</Text>
-              <Text style={styles.tryValue}>
-                {tryValue.toLocaleString('tr-TR')}
-              </Text>
+              <Text style={styles.tryValue}>{tryValue.toLocaleString('tr-TR')}</Text>
             </View>
           </View>
         </View>
+
+        {isExpanded && (
+          <View style={styles.expandedSection}>
+            <View style={styles.expandedRow}>
+              <View style={styles.expandedIconLabel}>
+                <Star color={Colors.secondary} size={16} />
+                <Text style={styles.expandedLabel}>Compass Points</Text>
+              </View>
+              <TextInput
+                style={styles.expandedInput}
+                value={state.points.toString()}
+                onChangeText={(value) => {
+                  const numValue = parseInt(value.replace(/[^0-9]/g, ''), 10) || 0;
+                  updateField(program.programId, 'points', numValue);
+                }}
+                keyboardType="numeric"
+              />
+            </View>
+
+            <View style={styles.expandedRow}>
+              <View style={styles.expandedIconLabel}>
+                <Clock color={Colors.info} size={16} />
+                <Text style={styles.expandedLabel}>Süre</Text>
+              </View>
+              <TextInput
+                style={styles.expandedInput}
+                value={state.duration}
+                onChangeText={(value) => updateField(program.programId, 'duration', value)}
+                placeholder="Örn: 6 ay"
+                placeholderTextColor={Colors.textMuted}
+              />
+            </View>
+
+            <View style={styles.expandedRow}>
+              <View style={styles.expandedIconLabel}>
+                <Globe color={Colors.success} size={16} />
+                <Text style={styles.expandedLabel}>Ülkeler (virgülle ayırın)</Text>
+              </View>
+              <TextInput
+                style={[styles.expandedInput, styles.expandedInputWide]}
+                value={state.countries}
+                onChangeText={(value) => updateField(program.programId, 'countries', value)}
+                placeholder="ABD, İngiltere, Kanada"
+                placeholderTextColor={Colors.textMuted}
+              />
+            </View>
+
+            <View style={styles.expandedDescriptionRow}>
+              <View style={styles.expandedIconLabel}>
+                <FileText color={Colors.primaryLight} size={16} />
+                <Text style={styles.expandedLabel}>Açıklama</Text>
+              </View>
+              <TextInput
+                style={[styles.expandedInput, styles.expandedInputMultiline]}
+                value={state.description}
+                onChangeText={(value) => updateField(program.programId, 'description', value)}
+                placeholder="Program açıklaması..."
+                placeholderTextColor={Colors.textMuted}
+                multiline
+                numberOfLines={3}
+                textAlignVertical="top"
+              />
+            </View>
+          </View>
+        )}
       </View>
     );
   };
@@ -164,21 +264,17 @@ export default function ProgramCommissionsScreen() {
   return (
     <View style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
-      
+
       <LinearGradient
         colors={[Colors.gradient.start, Colors.gradient.middle, Colors.gradient.end]}
         style={styles.headerGradient}
       >
         <SafeAreaView edges={['top']}>
           <View style={styles.header}>
-            <TouchableOpacity
-              style={styles.backButton}
-              onPress={() => router.back()}
-              testID="back-button"
-            >
+            <TouchableOpacity style={styles.backButton} onPress={() => router.back()} testID="back-button">
               <ArrowLeft color={Colors.text} size={24} />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Program Komisyonları</Text>
+            <Text style={styles.headerTitle}>Program Yönetimi</Text>
             <View style={styles.headerPlaceholder} />
           </View>
         </SafeAreaView>
@@ -195,40 +291,35 @@ export default function ProgramCommissionsScreen() {
         showsVerticalScrollIndicator={false}
       >
         <Text style={styles.sectionDescription}>
-          Her program için varsayılan komisyon oranlarını düzenleyebilirsiniz.
-          Elçi bazlı özel oranlar için elçi detayına gidin.
+          Her program için komisyon, puan, açıklama, süre ve ülke bilgilerini düzenleyebilirsiniz.
+          Detayları görmek için programa dokunun.
         </Text>
 
-        {programs.map(renderProgramItem)}
+        {programCommissionsQuery.isLoading ? (
+          <ActivityIndicator size="large" color={Colors.primary} style={{ marginVertical: 40 }} />
+        ) : (
+          programs.map(renderProgramItem)
+        )}
 
         <View style={styles.actionButtons}>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.resetButton]}
-            onPress={handleReset}
-            testID="reset-button"
-          >
+          <TouchableOpacity style={[styles.actionButton, styles.resetButton]} onPress={handleReset} testID="reset-button">
             <RefreshCw color={Colors.text} size={20} />
-            <Text style={styles.resetButtonText}>Varsayılana Sıfırla</Text>
+            <Text style={styles.resetButtonText}>Sıfırla</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[
-              styles.actionButton,
-              styles.saveButton,
-              !hasChanges && styles.saveButtonDisabled,
-            ]}
+            style={[styles.actionButton, styles.saveButton, !hasChanges && styles.saveButtonDisabled]}
             onPress={handleSave}
-            disabled={!hasChanges}
+            disabled={!hasChanges || updateProgramMutation.isPending}
             testID="save-button"
           >
-            <Save color={hasChanges ? '#000' : Colors.textMuted} size={20} />
-            <Text
-              style={[
-                styles.saveButtonText,
-                !hasChanges && styles.saveButtonTextDisabled,
-              ]}
-            >
-              Değişiklikleri Kaydet
-            </Text>
+            {updateProgramMutation.isPending ? (
+              <ActivityIndicator size="small" color="#000" />
+            ) : (
+              <>
+                <Save color={hasChanges ? '#000' : Colors.textMuted} size={20} />
+                <Text style={[styles.saveButtonText, !hasChanges && styles.saveButtonTextDisabled]}>Kaydet</Text>
+              </>
+            )}
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -380,6 +471,56 @@ const styles = StyleSheet.create({
     width: 40,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  expandedSection: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+  expandedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  expandedIconLabel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  expandedLabel: {
+    fontSize: 13,
+    fontWeight: '500' as const,
+    color: Colors.textSecondary,
+  },
+  expandedInput: {
+    backgroundColor: Colors.surfaceLight,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: Colors.text,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    minWidth: 100,
+    textAlign: 'right' as const,
+  },
+  expandedInputWide: {
+    flex: 1,
+    marginLeft: 12,
+    textAlign: 'left' as const,
+  },
+  expandedDescriptionRow: {
+    marginBottom: 8,
+  },
+  expandedInputMultiline: {
+    marginTop: 8,
+    minHeight: 70,
+    textAlign: 'left' as const,
+    textAlignVertical: 'top' as const,
+    width: '100%',
   },
   actionButtons: {
     flexDirection: 'row',

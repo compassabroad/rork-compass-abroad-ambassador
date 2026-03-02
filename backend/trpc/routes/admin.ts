@@ -32,6 +32,29 @@ function verifyAdmin(token: string): { id: string; email: string; role: string }
   return { id: decoded.id, email: decoded.email, role: decoded.role };
 }
 
+function cleanId(id: string): string {
+  return typeof id === 'string' && id.includes(':') ? id.split(':')[1] : id;
+}
+
+const STAGE_LABELS_TR: Record<string, string> = {
+  pre_payment: 'Ön Ödeme',
+  registered: 'Kayıt',
+  documents_completed: 'Belgeler Tamam',
+  visa_applied: 'Vize Başvurusu',
+  visa_approved: 'Vize Onaylandı',
+  visa_rejected: 'Vize Red',
+  orientation: 'Oryantasyon',
+  departed: 'Uçtu',
+};
+
+const AMBASSADOR_TYPE_LABELS_TR: Record<string, string> = {
+  bronze: 'Bronz',
+  silver: 'Gümüş',
+  gold: 'Altın',
+  platinum: 'Platin',
+  diamond: 'Elmas',
+};
+
 interface AmbassadorRecord {
   id: string;
   email: string;
@@ -45,6 +68,11 @@ interface AmbassadorRecord {
   role: string;
   parent_id: string | null;
   created_at: string;
+  compass_points?: number;
+  network_commission_rate?: number;
+  category?: string;
+  sub_type?: string;
+  company_name?: string | null;
 }
 
 interface BankAccountRecord {
@@ -81,6 +109,73 @@ interface WithdrawalRecord {
   processed_at: string | null;
 }
 
+interface StudentRecord {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  program: string;
+  stage: string;
+  ambassador_id: string;
+  country: string;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  invitation_status: string | null;
+  invitation_token: string | null;
+}
+
+interface ProgramRecord {
+  id: string;
+  name: string;
+  name_en: string;
+  default_commission_usd: number;
+  points: number;
+  description: string;
+  duration: string;
+  countries: string[];
+}
+
+interface CommissionRecord {
+  id: string;
+  ambassador_id: string;
+  student_id: string;
+  program_id: string;
+  amount_usd: number;
+  status: string;
+  stage: string;
+  created_at: string;
+}
+
+interface AnnouncementRecord {
+  id: string;
+  title: string;
+  preview: string;
+  content: string;
+  image_url: string | null;
+  created_at: string;
+}
+
+async function getCommissionAmountForAmbassador(ambassadorId: string, programId: string): Promise<number> {
+  console.log("[Admin] Getting commission amount for ambassador:", ambassadorId, "program:", programId);
+  const customCommissions = await dbQuery<{ custom_commission_usd: number | null; use_custom: boolean }>(
+    `SELECT custom_commission_usd, use_custom FROM ambassador_commissions WHERE (ambassador_id = '${escapeSQL(ambassadorId)}' OR ambassador_id = 'ambassadors:${escapeSQL(ambassadorId)}') AND (program_id = '${escapeSQL(programId)}' OR program_id = 'programs:${escapeSQL(programId)}') LIMIT 1;`
+  );
+
+  if (customCommissions.length > 0 && customCommissions[0].use_custom && customCommissions[0].custom_commission_usd !== null) {
+    console.log("[Admin] Using custom commission:", customCommissions[0].custom_commission_usd);
+    return customCommissions[0].custom_commission_usd;
+  }
+
+  const program = await dbQuery<ProgramRecord>(
+    `SELECT default_commission_usd FROM programs WHERE id = '${escapeSQL(programId)}' OR id = 'programs:${escapeSQL(programId)}' LIMIT 1;`
+  );
+
+  const defaultAmount = program[0]?.default_commission_usd ?? 0;
+  console.log("[Admin] Using default commission:", defaultAmount);
+  return defaultAmount;
+}
+
 export const adminRouter = createTRPCRouter({
   getDashboardStats: publicProcedure
     .input(z.object({ token: z.string() }))
@@ -112,6 +207,45 @@ export const adminRouter = createTRPCRouter({
         `SELECT count() FROM name_change_requests WHERE status = 'pending' GROUP ALL;`
       );
 
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      const commissionsPaidThisMonth = await dbQuery<{ total: number }>(
+        `SELECT math::sum(amount_usd) as total FROM commissions WHERE status = 'completed' AND created_at >= '${monthStart}' GROUP ALL;`
+      );
+
+      const pendingWithdrawalsAmount = await dbQuery<{ total: number }>(
+        `SELECT math::sum(amount_usd) as total FROM withdrawal_requests WHERE status = 'pending' GROUP ALL;`
+      );
+
+      const studentsByStage = await dbQuery<{ stage: string; count: number }>(
+        `SELECT stage, count() FROM students GROUP BY stage;`
+      );
+
+      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const newRegistrationsThisWeek = await dbQuery<{ count: number }>(
+        `SELECT count() FROM ambassadors WHERE created_at >= '${weekAgo}' GROUP ALL;`
+      );
+
+      const allAmbassadors = await dbQuery<AmbassadorRecord & { compass_points: number }>(
+        `SELECT * FROM ambassadors WHERE account_status = 'active' ORDER BY created_at DESC;`
+      );
+
+      const topAmbassadors = [];
+      for (const amb of allAmbassadors.slice(0, 10)) {
+        const ambId = cleanId(amb.id);
+        const studentCount = await dbQuery<{ count: number }>(
+          `SELECT count() FROM students WHERE ambassador_id = '${escapeSQL(ambId)}' GROUP ALL;`
+        );
+        topAmbassadors.push({
+          id: ambId,
+          name: `${amb.first_name} ${amb.last_name}`,
+          studentsReferred: studentCount[0]?.count ?? 0,
+          type: amb.type,
+        });
+      }
+
+      topAmbassadors.sort((a, b) => b.studentsReferred - a.studentsReferred);
+
       return {
         totalAmbassadors: activeAmbassadors[0]?.count ?? 0,
         totalStudents: totalStudents[0]?.count ?? 0,
@@ -119,6 +253,14 @@ export const adminRouter = createTRPCRouter({
         pendingWithdrawals: pendingWithdrawals[0]?.count ?? 0,
         pendingBankAccounts: pendingBanks[0]?.count ?? 0,
         pendingNameChanges: pendingNameChanges[0]?.count ?? 0,
+        commissionsPaidThisMonth: commissionsPaidThisMonth[0]?.total ?? 0,
+        pendingWithdrawalsAmount: pendingWithdrawalsAmount[0]?.total ?? 0,
+        studentsByStage: studentsByStage.map(s => ({
+          stage: s.stage,
+          count: s.count,
+        })),
+        newRegistrationsThisWeek: newRegistrationsThisWeek[0]?.count ?? 0,
+        topAmbassadors: topAmbassadors.slice(0, 5),
       };
     }),
 
@@ -136,8 +278,7 @@ export const adminRouter = createTRPCRouter({
       for (const amb of pending) {
         let referredBy: string | undefined;
         if (amb.parent_id) {
-          const parentId = typeof amb.parent_id === 'string' && amb.parent_id.includes(':')
-            ? amb.parent_id.split(':')[1] : amb.parent_id;
+          const parentId = cleanId(amb.parent_id);
           const parent = await dbQuery<AmbassadorRecord>(
             `SELECT referral_code FROM ambassadors WHERE id = '${escapeSQL(parentId)}' LIMIT 1;`
           );
@@ -145,7 +286,7 @@ export const adminRouter = createTRPCRouter({
         }
 
         result.push({
-          id: typeof amb.id === 'string' && amb.id.includes(':') ? amb.id.split(':')[1] : amb.id,
+          id: cleanId(amb.id),
           name: `${amb.first_name} ${amb.last_name}`,
           email: amb.email,
           phone: amb.phone,
@@ -207,15 +348,14 @@ export const adminRouter = createTRPCRouter({
 
       const result = [];
       for (const bank of pendingBanks) {
-        const ambId = typeof bank.ambassador_id === 'string' && bank.ambassador_id.includes(':')
-          ? bank.ambassador_id.split(':')[1] : bank.ambassador_id;
+        const ambId = cleanId(bank.ambassador_id);
         const ambassador = await dbQuery<AmbassadorRecord>(
           `SELECT first_name, last_name, email FROM ambassadors WHERE id = '${escapeSQL(ambId)}' LIMIT 1;`
         );
         const amb = ambassador[0];
 
         result.push({
-          id: typeof bank.id === 'string' && bank.id.includes(':') ? bank.id.split(':')[1] : bank.id,
+          id: cleanId(bank.id),
           ambassadorId: ambId,
           ambassadorName: amb ? `${amb.first_name} ${amb.last_name}` : 'Bilinmeyen',
           ambassadorEmail: amb?.email ?? '',
@@ -267,15 +407,14 @@ export const adminRouter = createTRPCRouter({
 
       const result = [];
       for (const req of requests) {
-        const ambId = typeof req.ambassador_id === 'string' && req.ambassador_id.includes(':')
-          ? req.ambassador_id.split(':')[1] : req.ambassador_id;
+        const ambId = cleanId(req.ambassador_id);
         const ambassador = await dbQuery<AmbassadorRecord>(
           `SELECT first_name, last_name FROM ambassadors WHERE id = '${escapeSQL(ambId)}' LIMIT 1;`
         );
         const amb = ambassador[0];
 
         result.push({
-          id: typeof req.id === 'string' && req.id.includes(':') ? req.id.split(':')[1] : req.id,
+          id: cleanId(req.id),
           ambassadorId: ambId,
           ambassadorName: amb ? `${amb.first_name} ${amb.last_name}` : 'Bilinmeyen',
           currentFirstName: req.current_first_name,
@@ -306,8 +445,7 @@ export const adminRouter = createTRPCRouter({
       }
 
       const req = requests[0];
-      const ambId = typeof req.ambassador_id === 'string' && req.ambassador_id.includes(':')
-        ? req.ambassador_id.split(':')[1] : req.ambassador_id;
+      const ambId = cleanId(req.ambassador_id);
 
       await dbQueryMultiple(
         `UPDATE ambassadors:${escapeSQL(ambId)} SET first_name = '${escapeSQL(req.requested_first_name)}', last_name = '${escapeSQL(req.requested_last_name)}', pending_first_name = NONE, pending_last_name = NONE, name_change_request_date = NONE, updated_at = '${now}';`
@@ -336,8 +474,7 @@ export const adminRouter = createTRPCRouter({
       }
 
       const req = requests[0];
-      const ambId = typeof req.ambassador_id === 'string' && req.ambassador_id.includes(':')
-        ? req.ambassador_id.split(':')[1] : req.ambassador_id;
+      const ambId = cleanId(req.ambassador_id);
 
       await dbQueryMultiple(
         `UPDATE ambassadors:${escapeSQL(ambId)} SET pending_first_name = NONE, pending_last_name = NONE, name_change_request_date = NONE, updated_at = '${now}';`
@@ -362,8 +499,7 @@ export const adminRouter = createTRPCRouter({
 
       const result = [];
       for (const w of withdrawals) {
-        const ambId = typeof w.ambassador_id === 'string' && w.ambassador_id.includes(':')
-          ? w.ambassador_id.split(':')[1] : w.ambassador_id;
+        const ambId = cleanId(w.ambassador_id);
         const ambassador = await dbQuery<AmbassadorRecord>(
           `SELECT first_name, last_name, email FROM ambassadors WHERE id = '${escapeSQL(ambId)}' LIMIT 1;`
         );
@@ -371,8 +507,7 @@ export const adminRouter = createTRPCRouter({
 
         let bankInfo = { iban: '', bankName: '' };
         if (w.bank_account_id) {
-          const bankId = typeof w.bank_account_id === 'string' && w.bank_account_id.includes(':')
-            ? w.bank_account_id.split(':')[1] : w.bank_account_id;
+          const bankId = cleanId(w.bank_account_id);
           const banks = await dbQuery<BankAccountRecord>(
             `SELECT iban, bank_name FROM bank_accounts WHERE id = '${escapeSQL(bankId)}' LIMIT 1;`
           );
@@ -382,7 +517,7 @@ export const adminRouter = createTRPCRouter({
         }
 
         result.push({
-          id: typeof w.id === 'string' && w.id.includes(':') ? w.id.split(':')[1] : w.id,
+          id: cleanId(w.id),
           ambassadorId: ambId,
           ambassadorName: amb ? `${amb.first_name} ${amb.last_name}` : 'Bilinmeyen',
           ambassadorEmail: amb?.email ?? '',
@@ -414,7 +549,7 @@ export const adminRouter = createTRPCRouter({
       );
 
       for (const t of transactions) {
-        const tId = typeof t.id === 'string' && t.id.includes(':') ? t.id.split(':')[1] : t.id;
+        const tId = cleanId(t.id);
         await dbQueryMultiple(
           `UPDATE transactions:${escapeSQL(tId)} SET status = 'completed';`
         );
@@ -443,16 +578,19 @@ export const adminRouter = createTRPCRouter({
       console.log("[Admin] Getting program commissions");
       verifyAdmin(input.token);
 
-      const programs = await dbQuery<{ id: string; name: string; name_en: string; default_commission_usd: number; points: number }>(
+      const programs = await dbQuery<ProgramRecord>(
         `SELECT * FROM programs ORDER BY name ASC;`
       );
 
       return programs.map(p => ({
-        programId: typeof p.id === 'string' && p.id.includes(':') ? p.id.split(':')[1] : p.id,
+        programId: cleanId(p.id),
         programName: p.name,
         programNameEn: p.name_en,
         defaultCommissionUSD: p.default_commission_usd,
         points: p.points,
+        description: p.description ?? '',
+        duration: p.duration ?? '',
+        countries: p.countries ?? [],
       }));
     }),
 
@@ -465,6 +603,47 @@ export const adminRouter = createTRPCRouter({
       await dbQueryMultiple(
         `UPDATE programs:${escapeSQL(input.programId)} SET default_commission_usd = ${input.commissionUSD};`
       );
+
+      return { success: true };
+    }),
+
+  updateProgram: publicProcedure
+    .input(z.object({
+      token: z.string(),
+      programId: z.string(),
+      defaultCommissionUSD: z.number().optional(),
+      points: z.number().optional(),
+      description: z.string().optional(),
+      duration: z.string().optional(),
+      countries: z.array(z.string()).optional(),
+    }))
+    .mutation(async ({ input }) => {
+      console.log("[Admin] Updating program:", input.programId);
+      verifyAdmin(input.token);
+
+      const updates: string[] = [];
+      if (input.defaultCommissionUSD !== undefined) {
+        updates.push(`default_commission_usd = ${input.defaultCommissionUSD}`);
+      }
+      if (input.points !== undefined) {
+        updates.push(`points = ${input.points}`);
+      }
+      if (input.description !== undefined) {
+        updates.push(`description = '${escapeSQL(input.description)}'`);
+      }
+      if (input.duration !== undefined) {
+        updates.push(`duration = '${escapeSQL(input.duration)}'`);
+      }
+      if (input.countries !== undefined) {
+        const countriesStr = input.countries.map(c => `'${escapeSQL(c)}'`).join(', ');
+        updates.push(`countries = [${countriesStr}]`);
+      }
+
+      if (updates.length > 0) {
+        await dbQueryMultiple(
+          `UPDATE programs:${escapeSQL(input.programId)} SET ${updates.join(', ')};`
+        );
+      }
 
       return { success: true };
     }),
@@ -484,7 +663,7 @@ export const adminRouter = createTRPCRouter({
       }
 
       const amb = ambassador[0];
-      const ambId = typeof amb.id === 'string' && amb.id.includes(':') ? amb.id.split(':')[1] : amb.id;
+      const ambId = cleanId(amb.id);
 
       const customCommissions = await dbQuery<{ id: string; ambassador_id: string; program_id: string; custom_commission_usd: number | null; use_custom: boolean }>(
         `SELECT * FROM ambassador_commissions WHERE ambassador_id = '${escapeSQL(ambId)}' OR ambassador_id = 'ambassadors:${escapeSQL(ambId)}';`
@@ -503,9 +682,9 @@ export const adminRouter = createTRPCRouter({
           referralCode: amb.referral_code,
         },
         commissions: programs.map(p => {
-          const pid = typeof p.id === 'string' && p.id.includes(':') ? p.id.split(':')[1] : p.id;
+          const pid = cleanId(p.id);
           const custom = customCommissions.find(c => {
-            const cpid = typeof c.program_id === 'string' && c.program_id.includes(':') ? c.program_id.split(':')[1] : c.program_id;
+            const cpid = cleanId(c.program_id);
             return cpid === pid;
           });
           return {
@@ -537,7 +716,7 @@ export const adminRouter = createTRPCRouter({
       );
 
       if (existing.length > 0) {
-        const existId = typeof existing[0].id === 'string' && existing[0].id.includes(':') ? existing[0].id.split(':')[1] : existing[0].id;
+        const existId = cleanId(existing[0].id);
         const customVal = input.customCommissionUSD !== null ? input.customCommissionUSD.toString() : 'NONE';
         await dbQueryMultiple(
           `UPDATE ambassador_commissions:${escapeSQL(existId)} SET custom_commission_usd = ${customVal}, use_custom = ${input.useCustom};`
@@ -576,14 +755,14 @@ CREATE ambassador_commissions:${newId} SET
       console.log("[Admin] Getting ambassador detail:", input.ambassadorId);
       verifyAdmin(input.token);
 
-      const results = await dbQuery<AmbassadorRecord & { compass_points: number; network_commission_rate: number; type: string; category: string; sub_type: string; company_name: string | null }>(
+      const results = await dbQuery<AmbassadorRecord>(
         `SELECT * FROM ambassadors WHERE id = '${escapeSQL(input.ambassadorId)}' OR id = 'ambassadors:${escapeSQL(input.ambassadorId)}' LIMIT 1;`
       );
 
       if (results.length === 0) throw new Error("Elçi bulunamadı");
 
       const amb = results[0];
-      const ambId = typeof amb.id === 'string' && amb.id.includes(':') ? amb.id.split(':')[1] : amb.id;
+      const ambId = cleanId(amb.id);
 
       const studentCount = await dbQuery<{ count: number }>(
         `SELECT count() FROM students WHERE ambassador_id = '${escapeSQL(ambId)}' GROUP ALL;`
@@ -608,13 +787,13 @@ CREATE ambassador_commissions:${newId} SET
         type: amb.type,
         referralCode: amb.referral_code,
         accountStatus: amb.account_status,
-        compassPoints: (amb as any).compass_points ?? 0,
-        networkCommissionRate: (amb as any).network_commission_rate ?? 10,
+        compassPoints: amb.compass_points ?? 0,
+        networkCommissionRate: amb.network_commission_rate ?? 10,
         studentsReferred: studentCount[0]?.count ?? 0,
         totalEarningsUSD: earningsResult[0]?.total ?? 0,
         joinedAt: amb.created_at,
         subAmbassadors: subAmbassadors.map(s => ({
-          id: typeof s.id === 'string' && s.id.includes(':') ? s.id.split(':')[1] : s.id,
+          id: cleanId(s.id),
           name: `${s.first_name} ${s.last_name}`,
           type: s.type,
           referralCode: s.referral_code,
@@ -637,7 +816,7 @@ CREATE ambassador_commissions:${newId} SET
       const ambassadors = await dbQuery<AmbassadorRecord>(sql);
 
       return ambassadors.map(a => ({
-        id: typeof a.id === 'string' && a.id.includes(':') ? a.id.split(':')[1] : a.id,
+        id: cleanId(a.id),
         name: `${a.first_name} ${a.last_name}`,
         email: a.email,
         type: a.type,
@@ -645,5 +824,425 @@ CREATE ambassador_commissions:${newId} SET
         city: a.city,
         createdAt: a.created_at,
       }));
+    }),
+
+  updateStudentStage: publicProcedure
+    .input(z.object({
+      token: z.string(),
+      studentId: z.string(),
+      newStage: z.enum(['pre_payment', 'registered', 'documents_completed', 'visa_applied', 'visa_approved', 'visa_rejected', 'orientation', 'departed']),
+    }))
+    .mutation(async ({ input }) => {
+      console.log("[Admin] Updating student stage:", input.studentId, "to", input.newStage);
+      const admin = verifyAdmin(input.token);
+      const now = nowISO();
+
+      const students = await dbQuery<StudentRecord>(
+        `SELECT * FROM students WHERE id = '${escapeSQL(input.studentId)}' OR id = 'students:${escapeSQL(input.studentId)}' LIMIT 1;`
+      );
+
+      if (students.length === 0) {
+        throw new Error("Öğrenci bulunamadı");
+      }
+
+      const student = students[0];
+      const studentId = cleanId(student.id);
+      const ambassadorId = cleanId(student.ambassador_id);
+
+      const ambassadors = await dbQuery<AmbassadorRecord>(
+        `SELECT * FROM ambassadors WHERE id = '${escapeSQL(ambassadorId)}' OR id = 'ambassadors:${escapeSQL(ambassadorId)}' LIMIT 1;`
+      );
+
+      if (ambassadors.length === 0) {
+        throw new Error("İlgili elçi bulunamadı");
+      }
+
+      const ambassador = ambassadors[0];
+      const ambId = cleanId(ambassador.id);
+
+      await dbQueryMultiple(
+        `UPDATE students:${escapeSQL(studentId)} SET stage = '${input.newStage}', updated_at = '${now}';`
+      );
+
+      const pipelineId = generateId();
+      await dbQueryMultiple(`CREATE student_pipeline_history:${pipelineId} SET
+        student_id = 'students:${escapeSQL(studentId)}',
+        stage = '${input.newStage}',
+        date = '${now}',
+        changed_by = '${escapeSQL(admin.id)}',
+        created_at = '${now}';`);
+
+      const programId = cleanId(student.program);
+      const commissionTotal = await getCommissionAmountForAmbassador(ambId, programId);
+      let commissionAmount = 0;
+      let commissionStatus = 'pending';
+      let commissionMessage = '';
+
+      if (input.newStage === 'registered') {
+        commissionAmount = commissionTotal * 0.25;
+        commissionStatus = 'pending';
+        commissionMessage = `Komisyon: $${commissionAmount.toFixed(0)} (kayıt - %25)`;
+      } else if (input.newStage === 'visa_approved') {
+        commissionAmount = commissionTotal * 0.25;
+        commissionStatus = 'pending';
+        commissionMessage = `Komisyon: $${commissionAmount.toFixed(0)} (vize onayı - %25)`;
+      } else if (input.newStage === 'departed') {
+        commissionAmount = commissionTotal * 0.50;
+        commissionStatus = 'completed';
+        commissionMessage = `Komisyon: $${commissionAmount.toFixed(0)} (uçuş - %50)`;
+
+        const pendingCommissions = await dbQuery<CommissionRecord>(
+          `SELECT * FROM commissions WHERE student_id = '${escapeSQL(studentId)}' AND ambassador_id = '${escapeSQL(ambId)}' AND status = 'pending';`
+        );
+        for (const pc of pendingCommissions) {
+          const pcId = cleanId(pc.id);
+          await dbQueryMultiple(
+            `UPDATE commissions:${escapeSQL(pcId)} SET status = 'completed';`
+          );
+        }
+      } else if (input.newStage === 'visa_rejected') {
+        const pendingCommissions = await dbQuery<CommissionRecord>(
+          `SELECT * FROM commissions WHERE student_id = '${escapeSQL(studentId)}' AND ambassador_id = '${escapeSQL(ambId)}' AND status = 'pending';`
+        );
+        for (const pc of pendingCommissions) {
+          const pcId = cleanId(pc.id);
+          await dbQueryMultiple(
+            `UPDATE commissions:${escapeSQL(pcId)} SET status = 'cancelled';`
+          );
+        }
+        commissionMessage = 'Bekleyen komisyonlar iptal edildi';
+      }
+
+      if (commissionAmount > 0) {
+        const commId = generateId();
+        await dbQueryMultiple(`CREATE commissions:${commId} SET
+          ambassador_id = '${escapeSQL(ambId)}',
+          student_id = '${escapeSQL(studentId)}',
+          program_id = '${escapeSQL(programId)}',
+          amount_usd = ${commissionAmount},
+          status = '${commissionStatus}',
+          stage = '${input.newStage}',
+          created_at = '${now}';`);
+
+        const txId = generateId();
+        const txType = input.newStage === 'registered' ? 'student_registration'
+          : input.newStage === 'visa_approved' ? 'student_visa_approved'
+          : 'student_departed';
+        await dbQueryMultiple(`CREATE transactions:${txId} SET
+          ambassador_id = '${escapeSQL(ambId)}',
+          type = '${txType}',
+          amount_usd = ${commissionAmount},
+          amount_try = 0,
+          description = '${escapeSQL(student.name)} - ${escapeSQL(STAGE_LABELS_TR[input.newStage] ?? input.newStage)}',
+          student_name = '${escapeSQL(student.name)}',
+          student_id = '${escapeSQL(studentId)}',
+          status = '${commissionStatus}',
+          created_at = '${now}';`);
+
+        if (ambassador.parent_id) {
+          const parentId = cleanId(ambassador.parent_id);
+          const parents = await dbQuery<AmbassadorRecord>(
+            `SELECT * FROM ambassadors WHERE id = '${escapeSQL(parentId)}' OR id = 'ambassadors:${escapeSQL(parentId)}' LIMIT 1;`
+          );
+          if (parents.length > 0) {
+            const parent = parents[0];
+            const parentCleanId = cleanId(parent.id);
+            const networkRate = parent.network_commission_rate ?? 10;
+            const networkCommission = commissionAmount * networkRate / 100;
+
+            if (networkCommission > 0) {
+              const netCommId = generateId();
+              await dbQueryMultiple(`CREATE commissions:${netCommId} SET
+                ambassador_id = '${escapeSQL(parentCleanId)}',
+                student_id = '${escapeSQL(studentId)}',
+                program_id = '${escapeSQL(programId)}',
+                amount_usd = ${networkCommission},
+                status = '${commissionStatus}',
+                stage = '${input.newStage}',
+                type = 'network',
+                created_at = '${now}';`);
+
+              const netTxId = generateId();
+              await dbQueryMultiple(`CREATE transactions:${netTxId} SET
+                ambassador_id = '${escapeSQL(parentCleanId)}',
+                type = 'referral_commission',
+                amount_usd = ${networkCommission},
+                amount_try = 0,
+                description = 'Ağ komisyonu: ${escapeSQL(student.name)} (${escapeSQL(ambassador.first_name)} ${escapeSQL(ambassador.last_name)} üzerinden)',
+                student_name = '${escapeSQL(student.name)}',
+                status = '${commissionStatus}',
+                created_at = '${now}';`);
+            }
+          }
+        }
+      }
+
+      const stageLabelTr = STAGE_LABELS_TR[input.newStage] ?? input.newStage;
+      const notifId = generateId();
+      await dbQueryMultiple(`CREATE notifications:${notifId} SET
+        ambassador_id = 'ambassadors:${escapeSQL(ambId)}',
+        type = 'student_update',
+        title = 'Öğrenci Aşama Güncellemesi',
+        message = 'Öğrenciniz ${escapeSQL(student.name)} ${escapeSQL(stageLabelTr)} aşamasına geçti',
+        read = false,
+        created_at = '${now}';`);
+
+      return {
+        success: true,
+        message: 'Öğrenci aşaması güncellendi',
+        commissionMessage,
+        commissionAmount,
+      };
+    }),
+
+  getAllStudents: publicProcedure
+    .input(z.object({
+      token: z.string(),
+      stage: z.string().optional(),
+      search: z.string().optional(),
+      ambassadorId: z.string().optional(),
+    }))
+    .query(async ({ input }) => {
+      console.log("[Admin] Getting all students");
+      verifyAdmin(input.token);
+
+      let conditions = ['1=1'];
+      if (input.stage && input.stage !== 'all') {
+        conditions.push(`stage = '${escapeSQL(input.stage)}'`);
+      }
+      if (input.search && input.search.trim()) {
+        const s = escapeSQL(input.search.trim().toLowerCase());
+        conditions.push(`(string::lowercase(name) CONTAINS '${s}' OR string::lowercase(email) CONTAINS '${s}')`);
+      }
+      if (input.ambassadorId) {
+        conditions.push(`(ambassador_id = '${escapeSQL(input.ambassadorId)}' OR ambassador_id = 'ambassadors:${escapeSQL(input.ambassadorId)}')`);
+      }
+
+      const sql = `SELECT * FROM students WHERE ${conditions.join(' AND ')} ORDER BY created_at DESC;`;
+      const students = await dbQuery<StudentRecord>(sql);
+
+      const result = [];
+      for (const s of students) {
+        const ambId = cleanId(s.ambassador_id);
+        const ambassador = await dbQuery<AmbassadorRecord>(
+          `SELECT first_name, last_name FROM ambassadors WHERE id = '${escapeSQL(ambId)}' LIMIT 1;`
+        );
+        const amb = ambassador[0];
+
+        result.push({
+          id: cleanId(s.id),
+          name: s.name,
+          email: s.email,
+          phone: s.phone,
+          program: s.program,
+          stage: s.stage,
+          country: s.country,
+          ambassadorId: ambId,
+          ambassadorName: amb ? `${amb.first_name} ${amb.last_name}` : 'Bilinmeyen',
+          createdAt: s.created_at,
+          updatedAt: s.updated_at,
+        });
+      }
+
+      return result;
+    }),
+
+  getStudentDetail: publicProcedure
+    .input(z.object({ token: z.string(), studentId: z.string() }))
+    .query(async ({ input }) => {
+      console.log("[Admin] Getting student detail:", input.studentId);
+      verifyAdmin(input.token);
+
+      const students = await dbQuery<StudentRecord>(
+        `SELECT * FROM students WHERE id = '${escapeSQL(input.studentId)}' OR id = 'students:${escapeSQL(input.studentId)}' LIMIT 1;`
+      );
+
+      if (students.length === 0) throw new Error("Öğrenci bulunamadı");
+
+      const student = students[0];
+      const studentId = cleanId(student.id);
+      const ambId = cleanId(student.ambassador_id);
+
+      const ambassador = await dbQuery<AmbassadorRecord>(
+        `SELECT first_name, last_name, email, referral_code FROM ambassadors WHERE id = '${escapeSQL(ambId)}' LIMIT 1;`
+      );
+      const amb = ambassador[0];
+
+      const pipeline = await dbQuery<{ stage: string; date: string; changed_by: string }>(
+        `SELECT * FROM student_pipeline_history WHERE student_id = '${escapeSQL(studentId)}' OR student_id = 'students:${escapeSQL(studentId)}' ORDER BY date ASC;`
+      );
+
+      const commissions = await dbQuery<CommissionRecord>(
+        `SELECT * FROM commissions WHERE student_id = '${escapeSQL(studentId)}' ORDER BY created_at ASC;`
+      );
+
+      return {
+        id: studentId,
+        name: student.name,
+        email: student.email,
+        phone: student.phone,
+        program: student.program,
+        stage: student.stage,
+        country: student.country,
+        notes: student.notes,
+        createdAt: student.created_at,
+        updatedAt: student.updated_at,
+        ambassadorId: ambId,
+        ambassadorName: amb ? `${amb.first_name} ${amb.last_name}` : 'Bilinmeyen',
+        ambassadorEmail: amb?.email ?? '',
+        pipeline: pipeline.map(p => ({
+          stage: p.stage,
+          date: p.date,
+          changedBy: p.changed_by,
+        })),
+        commissions: commissions.map(c => ({
+          id: cleanId(c.id),
+          amountUSD: c.amount_usd,
+          status: c.status,
+          stage: c.stage,
+          createdAt: c.created_at,
+        })),
+      };
+    }),
+
+  createAnnouncement: publicProcedure
+    .input(z.object({
+      token: z.string(),
+      title: z.string().min(1),
+      preview: z.string().min(1),
+      content: z.string().min(1),
+      imageUrl: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      console.log("[Admin] Creating announcement:", input.title);
+      verifyAdmin(input.token);
+      const now = nowISO();
+      const id = generateId();
+
+      const imageUrlVal = input.imageUrl ? `'${escapeSQL(input.imageUrl)}'` : 'NONE';
+      await dbQueryMultiple(`CREATE announcements:${id} SET
+        title = '${escapeSQL(input.title)}',
+        preview = '${escapeSQL(input.preview)}',
+        content = '${escapeSQL(input.content)}',
+        image_url = ${imageUrlVal},
+        created_at = '${now}';`);
+
+      const activeAmbassadors = await dbQuery<AmbassadorRecord>(
+        `SELECT id FROM ambassadors WHERE account_status = 'active';`
+      );
+
+      for (const amb of activeAmbassadors) {
+        const ambId = cleanId(amb.id);
+        const notifId = generateId();
+        await dbQueryMultiple(`CREATE notifications:${notifId} SET
+          ambassador_id = 'ambassadors:${escapeSQL(ambId)}',
+          type = 'announcement',
+          title = '${escapeSQL(input.title)}',
+          message = '${escapeSQL(input.preview)}',
+          read = false,
+          created_at = '${now}';`);
+      }
+
+      return { success: true };
+    }),
+
+  deleteAnnouncement: publicProcedure
+    .input(z.object({ token: z.string(), announcementId: z.string() }))
+    .mutation(async ({ input }) => {
+      console.log("[Admin] Deleting announcement:", input.announcementId);
+      verifyAdmin(input.token);
+
+      await dbQueryMultiple(
+        `DELETE announcements:${escapeSQL(input.announcementId)};`
+      );
+
+      return { success: true };
+    }),
+
+  getAnnouncements: publicProcedure
+    .input(z.object({ token: z.string() }))
+    .query(async ({ input }) => {
+      console.log("[Admin] Getting announcements");
+      verifyAdmin(input.token);
+
+      const announcements = await dbQuery<AnnouncementRecord>(
+        `SELECT * FROM announcements ORDER BY created_at DESC;`
+      );
+
+      return announcements.map(a => ({
+        id: cleanId(a.id),
+        title: a.title,
+        preview: a.preview,
+        content: a.content,
+        imageUrl: a.image_url,
+        createdAt: a.created_at,
+      }));
+    }),
+
+  updateCompassPoints: publicProcedure
+    .input(z.object({
+      token: z.string(),
+      ambassadorId: z.string(),
+      points: z.number(),
+      reason: z.string().min(1),
+    }))
+    .mutation(async ({ input }) => {
+      console.log("[Admin] Updating compass points for:", input.ambassadorId, "by", input.points);
+      verifyAdmin(input.token);
+      const now = nowISO();
+
+      const ambassadors = await dbQuery<AmbassadorRecord>(
+        `SELECT compass_points FROM ambassadors WHERE id = '${escapeSQL(input.ambassadorId)}' OR id = 'ambassadors:${escapeSQL(input.ambassadorId)}' LIMIT 1;`
+      );
+
+      if (ambassadors.length === 0) throw new Error("Elçi bulunamadı");
+
+      const currentPoints = ambassadors[0].compass_points ?? 0;
+      const newTotal = currentPoints + input.points;
+
+      await dbQueryMultiple(
+        `UPDATE ambassadors:${escapeSQL(input.ambassadorId)} SET compass_points = ${newTotal}, updated_at = '${now}';`
+      );
+
+      const action = input.points >= 0 ? 'eklendi' : 'çıkarıldı';
+      const absPoints = Math.abs(input.points);
+      const notifId = generateId();
+      await dbQueryMultiple(`CREATE notifications:${notifId} SET
+        ambassador_id = 'ambassadors:${escapeSQL(input.ambassadorId)}',
+        type = 'announcement',
+        title = 'Compass Points Güncellemesi',
+        message = '${absPoints} Compass Points ${action}: ${escapeSQL(input.reason)}',
+        read = false,
+        created_at = '${now}';`);
+
+      return { success: true, newTotal };
+    }),
+
+  updateAmbassadorType: publicProcedure
+    .input(z.object({
+      token: z.string(),
+      ambassadorId: z.string(),
+      newType: z.enum(['bronze', 'silver', 'gold', 'platinum', 'diamond']),
+    }))
+    .mutation(async ({ input }) => {
+      console.log("[Admin] Updating ambassador type:", input.ambassadorId, "to", input.newType);
+      verifyAdmin(input.token);
+      const now = nowISO();
+
+      await dbQueryMultiple(
+        `UPDATE ambassadors:${escapeSQL(input.ambassadorId)} SET type = '${input.newType}', updated_at = '${now}';`
+      );
+
+      const typeLabelTr = AMBASSADOR_TYPE_LABELS_TR[input.newType] ?? input.newType;
+      const notifId = generateId();
+      await dbQueryMultiple(`CREATE notifications:${notifId} SET
+        ambassador_id = 'ambassadors:${escapeSQL(input.ambassadorId)}',
+        type = 'announcement',
+        title = 'Seviye Güncellemesi',
+        message = 'Seviyeniz ${escapeSQL(typeLabelTr)} olarak güncellendi!',
+        read = false,
+        created_at = '${now}';`);
+
+      return { success: true };
     }),
 });
