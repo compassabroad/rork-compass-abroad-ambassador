@@ -2,8 +2,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import Colors from "@/constants/colors";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
@@ -175,59 +176,45 @@ function RootLayoutNav() {
   );
 }
 
+const DB_SEED_KEY = 'db_seeded_v2';
+
 function SeedManager() {
-  const [seedEnabled, setSeedEnabled] = useState<boolean>(true);
-  const [seedError, setSeedError] = useState<string | null>(null);
   const seedTriggered = useRef(false);
 
-  const statusQuery = trpc.dbSetup.checkStatus.useQuery(undefined, {
-    enabled: seedEnabled,
-    retry: 5,
-    retryDelay: 3000,
-  });
-
   const seedMutation = trpc.dbSetup.seedAll.useMutation({
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       console.log('[App] DB seed result:', JSON.stringify(data));
-      setSeedError(null);
+      try {
+        await AsyncStorage.setItem(DB_SEED_KEY, new Date().toISOString());
+        console.log('[App] DB seed key saved to AsyncStorage');
+      } catch (e) {
+        console.error('[App] Failed to save seed key:', e);
+      }
     },
     onError: (err) => {
       console.error('[App] DB seed mutation error:', err.message);
-      setSeedError(err.message);
     },
   });
 
   useEffect(() => {
-    if (statusQuery.error) {
-      console.error('[App] DB status check error:', statusQuery.error.message);
-    }
-  }, [statusQuery.error]);
-
-  useEffect(() => {
-    if (!statusQuery.data || seedTriggered.current) return;
-
-    const tables = statusQuery.data.tables ?? [];
-    const programsTable = tables.find((t) => t.table === 'programs');
-    const ambassadorsTable = tables.find((t) => t.table === 'ambassadors');
-
-    const hasPrograms = programsTable && programsTable.count > 0;
-    const hasAmbassadors = ambassadorsTable && ambassadorsTable.count > 0;
-
-    if (hasPrograms && hasAmbassadors) {
-      console.log('[App] DB already seeded. Programs:', programsTable?.count, 'Ambassadors:', ambassadorsTable?.count);
-      setSeedEnabled(false);
-      return;
-    }
-
-    console.log('[App] DB needs seeding. Running seedAll...');
+    if (seedTriggered.current) return;
     seedTriggered.current = true;
-    seedMutation.mutate();
-    setSeedEnabled(false);
-  }, [statusQuery.data, seedMutation]);
 
-  if (seedError) {
-    console.error('[App] Seed error displayed:', seedError);
-  }
+    (async () => {
+      try {
+        const seeded = await AsyncStorage.getItem(DB_SEED_KEY);
+        if (seeded) {
+          console.log('[App] DB already seeded at:', seeded);
+          return;
+        }
+        console.log('[App] No seed key found. Running seedAll...');
+        seedMutation.mutate();
+      } catch (e) {
+        console.error('[App] Error checking seed status:', e);
+        seedMutation.mutate();
+      }
+    })();
+  }, [seedMutation]);
 
   return null;
 }

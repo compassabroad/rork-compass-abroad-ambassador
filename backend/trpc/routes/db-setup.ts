@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { createTRPCRouter, publicProcedure } from "../create-context";
-import { dbQueryMultiple, nowISO } from "@/lib/db";
+import { dbQuery, dbQueryMultiple, nowISO } from "@/lib/db";
 
 const DEFINE_TABLES_SQL = `
 DEFINE TABLE IF NOT EXISTS ambassadors SCHEMAFULL;
@@ -178,8 +178,6 @@ function hashPassword(password: string): string {
 export { hashPassword };
 
 const SEED_PROGRAMS_SQL = `
-DELETE FROM programs;
-
 CREATE programs:language_education SET
   name = 'Dil Eğitimi',
   name_en = 'Language Education',
@@ -317,8 +315,6 @@ function getSeedAmbassadorsSQL(): string {
   const testHash = hashPassword("Test1234!");
 
   return `
-DELETE FROM ambassadors;
-
 CREATE ambassadors:admin1 SET
   email = 'admin@compassabroad.com',
   password_hash = '${adminHash}',
@@ -478,42 +474,81 @@ export const dbSetupRouter = createTRPCRouter({
     }
 
     try {
-      console.log("[DB Setup] Step 2: Seed programs...");
-      const programResults = await dbQueryMultiple(SEED_PROGRAMS_SQL);
-      const programErrors = programResults.filter((r) => r.status !== "OK");
-      results.push({
-        step: "programs",
-        success: programErrors.length === 0,
-        message: `${programResults.length} statements, ${programErrors.length} errors`,
-        errors: programErrors.map((e) => JSON.stringify(e)),
-      });
+      console.log("[DB Setup] Step 2: Check and seed programs...");
+      const existingPrograms = await dbQuery<{ id: string }>('SELECT id FROM programs LIMIT 1;');
+      if (existingPrograms.length === 0) {
+        console.log("[DB Setup] No programs found, seeding...");
+        const programResults = await dbQueryMultiple(SEED_PROGRAMS_SQL);
+        const programErrors = programResults.filter((r) => r.status !== "OK");
+        results.push({
+          step: "programs",
+          success: programErrors.length === 0,
+          message: `${programResults.length} statements, ${programErrors.length} errors`,
+          errors: programErrors.map((e) => JSON.stringify(e)),
+        });
+      } else {
+        console.log("[DB Setup] Programs already exist, skipping seed.");
+        results.push({ step: "programs", success: true, message: "Already seeded", errors: [] });
+      }
     } catch (error) {
-      results.push({
-        step: "programs",
-        success: false,
-        message: error instanceof Error ? error.message : String(error),
-        errors: [],
-      });
+      console.log("[DB Setup] Programs table may not exist yet, seeding...");
+      try {
+        const programResults = await dbQueryMultiple(SEED_PROGRAMS_SQL);
+        const programErrors = programResults.filter((r) => r.status !== "OK");
+        results.push({
+          step: "programs",
+          success: programErrors.length === 0,
+          message: `${programResults.length} statements, ${programErrors.length} errors`,
+          errors: programErrors.map((e) => JSON.stringify(e)),
+        });
+      } catch (innerError) {
+        results.push({
+          step: "programs",
+          success: false,
+          message: innerError instanceof Error ? innerError.message : String(innerError),
+          errors: [],
+        });
+      }
     }
 
     try {
-      console.log("[DB Setup] Step 3: Seed ambassadors...");
-      const ambassadorSQL = getSeedAmbassadorsSQL();
-      const ambassadorResults = await dbQueryMultiple(ambassadorSQL);
-      const ambassadorErrors = ambassadorResults.filter((r) => r.status !== "OK");
-      results.push({
-        step: "ambassadors",
-        success: ambassadorErrors.length === 0,
-        message: `${ambassadorResults.length} statements, ${ambassadorErrors.length} errors`,
-        errors: ambassadorErrors.map((e) => JSON.stringify(e)),
-      });
+      console.log("[DB Setup] Step 3: Check and seed ambassadors...");
+      const existingAdmin = await dbQuery<{ id: string }>("SELECT id FROM ambassadors WHERE email = 'admin@compassabroad.com' LIMIT 1;");
+      if (existingAdmin.length === 0) {
+        console.log("[DB Setup] No admin found, seeding ambassadors...");
+        const ambassadorSQL = getSeedAmbassadorsSQL();
+        const ambassadorResults = await dbQueryMultiple(ambassadorSQL);
+        const ambassadorErrors = ambassadorResults.filter((r) => r.status !== "OK");
+        results.push({
+          step: "ambassadors",
+          success: ambassadorErrors.length === 0,
+          message: `${ambassadorResults.length} statements, ${ambassadorErrors.length} errors`,
+          errors: ambassadorErrors.map((e) => JSON.stringify(e)),
+        });
+      } else {
+        console.log("[DB Setup] Admin already exists, skipping ambassador seed.");
+        results.push({ step: "ambassadors", success: true, message: "Already seeded", errors: [] });
+      }
     } catch (error) {
-      results.push({
-        step: "ambassadors",
-        success: false,
-        message: error instanceof Error ? error.message : String(error),
-        errors: [],
-      });
+      console.log("[DB Setup] Ambassadors table may not exist yet, seeding...");
+      try {
+        const ambassadorSQL = getSeedAmbassadorsSQL();
+        const ambassadorResults = await dbQueryMultiple(ambassadorSQL);
+        const ambassadorErrors = ambassadorResults.filter((r) => r.status !== "OK");
+        results.push({
+          step: "ambassadors",
+          success: ambassadorErrors.length === 0,
+          message: `${ambassadorResults.length} statements, ${ambassadorErrors.length} errors`,
+          errors: ambassadorErrors.map((e) => JSON.stringify(e)),
+        });
+      } catch (innerError) {
+        results.push({
+          step: "ambassadors",
+          success: false,
+          message: innerError instanceof Error ? innerError.message : String(innerError),
+          errors: [],
+        });
+      }
     }
 
     const allSuccess = results.every((r) => r.success);

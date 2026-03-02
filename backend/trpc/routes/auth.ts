@@ -249,7 +249,7 @@ export const authRouter = createTRPCRouter({
           );
         } catch (dbError) {
           console.error("[Auth] DB query failed during login:", dbError);
-          throw new Error("Veritabanı bağlantı hatası. Lütfen tekrar deneyin.");
+          throw new Error("Veritabanı henüz hazır değil. Uygulamayı kapatıp tekrar açın.");
         }
 
         if (results.length === 0) {
