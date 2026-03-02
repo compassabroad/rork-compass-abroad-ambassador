@@ -23,6 +23,16 @@ export const trpcClient = trpc.createClient({
     httpLink({
       url: `${getBaseUrl()}/api/trpc`,
       transformer: superjson,
+      async fetch(url, options) {
+        const response = await globalThis.fetch(url, options);
+        const contentType = response.headers.get('content-type') || '';
+        if (!response.ok && !contentType.includes('application/json')) {
+          const text = await response.text();
+          console.error('[tRPC] Non-JSON error response:', response.status, text.substring(0, 200));
+          throw new Error('Sunucu hatası. Lütfen tekrar deneyin.');
+        }
+        return response;
+      },
     }),
   ],
 });

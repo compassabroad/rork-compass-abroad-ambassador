@@ -177,22 +177,31 @@ function RootLayoutNav() {
 
 function SeedManager() {
   const [seedEnabled, setSeedEnabled] = useState<boolean>(true);
+  const [seedError, setSeedError] = useState<string | null>(null);
   const seedTriggered = useRef(false);
 
   const statusQuery = trpc.dbSetup.checkStatus.useQuery(undefined, {
     enabled: seedEnabled,
-    retry: 3,
-    retryDelay: 2000,
+    retry: 5,
+    retryDelay: 3000,
   });
 
   const seedMutation = trpc.dbSetup.seedAll.useMutation({
     onSuccess: (data) => {
       console.log('[App] DB seed result:', JSON.stringify(data));
+      setSeedError(null);
     },
     onError: (err) => {
       console.error('[App] DB seed mutation error:', err.message);
+      setSeedError(err.message);
     },
   });
+
+  useEffect(() => {
+    if (statusQuery.error) {
+      console.error('[App] DB status check error:', statusQuery.error.message);
+    }
+  }, [statusQuery.error]);
 
   useEffect(() => {
     if (!statusQuery.data || seedTriggered.current) return;
@@ -215,6 +224,10 @@ function SeedManager() {
     seedMutation.mutate();
     setSeedEnabled(false);
   }, [statusQuery.data, seedMutation]);
+
+  if (seedError) {
+    console.error('[App] Seed error displayed:', seedError);
+  }
 
   return null;
 }

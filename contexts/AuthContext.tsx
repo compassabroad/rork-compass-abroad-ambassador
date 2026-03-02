@@ -82,8 +82,9 @@ export const [AuthProvider, useAuth] = createContextHook((): AuthState => {
         return null;
       }
 
+      const inputPayload = { json: { token: authToken } };
       const response = await fetch(
-        `${baseUrl}/api/trpc/auth.me?input=${encodeURIComponent(JSON.stringify({ token: authToken }))}`,
+        `${baseUrl}/api/trpc/auth.me?input=${encodeURIComponent(JSON.stringify(inputPayload))}`,
         {
           method: 'GET',
           headers: {
@@ -93,14 +94,22 @@ export const [AuthProvider, useAuth] = createContextHook((): AuthState => {
       );
 
       if (!response.ok) {
-        console.error('[Auth] Profile fetch failed:', response.status);
+        const text = await response.text();
+        console.error('[Auth] Profile fetch failed:', response.status, text.substring(0, 200));
+        return null;
+      }
+
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        const text = await response.text();
+        console.error('[Auth] Non-JSON response:', text.substring(0, 200));
         return null;
       }
 
       const data = await response.json();
-      const result = data?.result?.data;
+      const result = data?.result?.data?.json ?? data?.result?.data;
       if (!result) {
-        console.error('[Auth] Invalid profile response');
+        console.error('[Auth] Invalid profile response:', JSON.stringify(data).substring(0, 300));
         return null;
       }
 

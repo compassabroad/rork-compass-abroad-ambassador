@@ -239,56 +239,67 @@ export const authRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ input }) => {
-      console.log("[Auth] Login attempt for:", input.email);
+      try {
+        console.log("[Auth] Login attempt for:", input.email);
 
-      const results = await dbQuery<AmbassadorRecord>(
-        `SELECT * FROM ambassadors WHERE email = '${escapeSQL(input.email)}' LIMIT 1;`
-      );
+        let results: AmbassadorRecord[];
+        try {
+          results = await dbQuery<AmbassadorRecord>(
+            `SELECT * FROM ambassadors WHERE email = '${escapeSQL(input.email)}' LIMIT 1;`
+          );
+        } catch (dbError) {
+          console.error("[Auth] DB query failed during login:", dbError);
+          throw new Error("Veritabanı bağlantı hatası. Lütfen tekrar deneyin.");
+        }
 
-      if (results.length === 0) {
-        throw new Error("E-posta veya şifre hatalı");
-      }
+        if (results.length === 0) {
+          throw new Error("E-posta veya şifre hatalı");
+        }
 
-      const ambassador = results[0];
-      const inputHash = hashPassword(input.password);
+        const ambassador = results[0];
+        const inputHash = hashPassword(input.password);
 
-      if (ambassador.password_hash !== inputHash) {
-        console.log("[Auth] Password mismatch for:", input.email);
-        throw new Error("E-posta veya şifre hatalı");
-      }
+        if (ambassador.password_hash !== inputHash) {
+          console.log("[Auth] Password mismatch for:", input.email);
+          throw new Error("E-posta veya şifre hatalı");
+        }
 
-      if (ambassador.account_status === "rejected") {
-        throw new Error("Hesabınız reddedilmiş. Destek ile iletişime geçin.");
-      }
+        if (ambassador.account_status === "rejected") {
+          throw new Error("Hesabınız reddedilmiş. Destek ile iletişime geçin.");
+        }
 
-      if (ambassador.account_status === "suspended") {
-        throw new Error("Hesabınız askıya alınmış.");
-      }
+        if (ambassador.account_status === "suspended") {
+          throw new Error("Hesabınız askıya alınmış.");
+        }
 
-      const token = createToken({
-        id: ambassador.id,
-        email: ambassador.email,
-        role: ambassador.role,
-      });
-
-      console.log("[Auth] Login successful for:", input.email, "status:", ambassador.account_status);
-
-      return {
-        token,
-        user: {
+        const token = createToken({
           id: ambassador.id,
           email: ambassador.email,
-          firstName: ambassador.first_name,
-          lastName: ambassador.last_name,
           role: ambassador.role,
-          accountStatus: ambassador.account_status,
-          type: ambassador.type,
-          referralCode: ambassador.referral_code,
-          city: ambassador.city,
-          compassPoints: ambassador.compass_points,
-          profilePhoto: ambassador.profile_photo,
-        },
-      };
+        });
+
+        console.log("[Auth] Login successful for:", input.email, "status:", ambassador.account_status);
+
+        return {
+          token,
+          user: {
+            id: ambassador.id,
+            email: ambassador.email,
+            firstName: ambassador.first_name,
+            lastName: ambassador.last_name,
+            role: ambassador.role,
+            accountStatus: ambassador.account_status,
+            type: ambassador.type,
+            referralCode: ambassador.referral_code,
+            city: ambassador.city,
+            compassPoints: ambassador.compass_points,
+            profilePhoto: ambassador.profile_photo,
+          },
+        };
+      } catch (error) {
+        console.error("[Auth] Login error:", error instanceof Error ? error.message : String(error));
+        throw error;
+      }
     }),
 
   me: publicProcedure
@@ -298,72 +309,93 @@ export const authRouter = createTRPCRouter({
       })
     )
     .query(async ({ input }) => {
-      console.log("[Auth] Fetching profile with token");
+      try {
+        console.log("[Auth] Fetching profile with token");
 
-      const decoded = decodeToken(input.token);
-      if (!decoded) {
-        throw new Error("Geçersiz oturum bilgisi");
+        const decoded = decodeToken(input.token);
+        if (!decoded) {
+          throw new Error("Geçersiz oturum bilgisi");
+        }
+
+        if (decoded.exp < Date.now()) {
+          throw new Error("Oturum süresi dolmuş");
+        }
+
+        const results = await dbQuery<AmbassadorRecord>(
+          `SELECT * FROM ambassadors WHERE id = '${escapeSQL(decoded.id)}' LIMIT 1;`
+        );
+
+        if (results.length === 0) {
+          throw new Error("Kullanıcı bulunamadı");
+        }
+
+        const ambassador = results[0];
+
+        let studentsCount = 0;
+        let bankAccountsCount = 0;
+        let subAmbassadorsCount = 0;
+
+        try {
+          const studentsResult = await dbQuery<{ count: number }>(
+            `SELECT count() FROM students WHERE ambassador_id = '${escapeSQL(ambassador.id)}' GROUP ALL;`
+          );
+          studentsCount = studentsResult[0]?.count ?? 0;
+        } catch (e) {
+          console.error("[Auth] Failed to count students:", e);
+        }
+
+        try {
+          const bankAccountsResult = await dbQuery<{ count: number }>(
+            `SELECT count() FROM bank_accounts WHERE ambassador_id = '${escapeSQL(ambassador.id)}' GROUP ALL;`
+          );
+          bankAccountsCount = bankAccountsResult[0]?.count ?? 0;
+        } catch (e) {
+          console.error("[Auth] Failed to count bank accounts:", e);
+        }
+
+        try {
+          const subAmbassadorsResult = await dbQuery<{ count: number }>(
+            `SELECT count() FROM ambassadors WHERE parent_id = '${escapeSQL(ambassador.id)}' GROUP ALL;`
+          );
+          subAmbassadorsCount = subAmbassadorsResult[0]?.count ?? 0;
+        } catch (e) {
+          console.error("[Auth] Failed to count sub-ambassadors:", e);
+        }
+
+        console.log("[Auth] Profile fetched for:", ambassador.email);
+
+        return {
+          id: ambassador.id,
+          email: ambassador.email,
+          firstName: ambassador.first_name,
+          lastName: ambassador.last_name,
+          phone: ambassador.phone,
+          role: ambassador.role,
+          accountStatus: ambassador.account_status,
+          type: ambassador.type,
+          category: ambassador.category,
+          subType: ambassador.sub_type,
+          companyName: ambassador.company_name,
+          referralCode: ambassador.referral_code,
+          city: ambassador.city,
+          compassPoints: ambassador.compass_points,
+          profilePhoto: ambassador.profile_photo,
+          birthDate: ambassador.birth_date,
+          tcIdentity: ambassador.tc_identity,
+          parentId: ambassador.parent_id,
+          networkCommissionRate: ambassador.network_commission_rate,
+          kvkkConsent: ambassador.kvkk_consent,
+          privacyPolicyConsent: ambassador.privacy_policy_consent,
+          termsConsent: ambassador.terms_consent,
+          createdAt: ambassador.created_at,
+          studentsReferred: studentsCount,
+          bankAccountsCount: bankAccountsCount,
+          subAmbassadorsCount: subAmbassadorsCount,
+        };
+      } catch (error) {
+        console.error("[Auth] me() error:", error instanceof Error ? error.message : String(error));
+        throw error;
       }
-
-      if (decoded.exp < Date.now()) {
-        throw new Error("Oturum süresi dolmuş");
-      }
-
-      const results = await dbQuery<AmbassadorRecord>(
-        `SELECT * FROM ambassadors WHERE id = '${escapeSQL(decoded.id)}' LIMIT 1;`
-      );
-
-      if (results.length === 0) {
-        throw new Error("Kullanıcı bulunamadı");
-      }
-
-      const ambassador = results[0];
-
-      const studentsResult = await dbQuery<{ count: number }>(
-        `SELECT count() FROM students WHERE ambassador_id = '${escapeSQL(ambassador.id)}' GROUP ALL;`
-      );
-      const studentsCount = studentsResult[0]?.count ?? 0;
-
-      const bankAccountsResult = await dbQuery<{ count: number }>(
-        `SELECT count() FROM bank_accounts WHERE ambassador_id = '${escapeSQL(ambassador.id)}' GROUP ALL;`
-      );
-      const bankAccountsCount = bankAccountsResult[0]?.count ?? 0;
-
-      const subAmbassadorsResult = await dbQuery<{ count: number }>(
-        `SELECT count() FROM ambassadors WHERE parent_id = '${escapeSQL(ambassador.id)}' GROUP ALL;`
-      );
-      const subAmbassadorsCount = subAmbassadorsResult[0]?.count ?? 0;
-
-      console.log("[Auth] Profile fetched for:", ambassador.email);
-
-      return {
-        id: ambassador.id,
-        email: ambassador.email,
-        firstName: ambassador.first_name,
-        lastName: ambassador.last_name,
-        phone: ambassador.phone,
-        role: ambassador.role,
-        accountStatus: ambassador.account_status,
-        type: ambassador.type,
-        category: ambassador.category,
-        subType: ambassador.sub_type,
-        companyName: ambassador.company_name,
-        referralCode: ambassador.referral_code,
-        city: ambassador.city,
-        compassPoints: ambassador.compass_points,
-        profilePhoto: ambassador.profile_photo,
-        birthDate: ambassador.birth_date,
-        tcIdentity: ambassador.tc_identity,
-        parentId: ambassador.parent_id,
-        networkCommissionRate: ambassador.network_commission_rate,
-        kvkkConsent: ambassador.kvkk_consent,
-        privacyPolicyConsent: ambassador.privacy_policy_consent,
-        termsConsent: ambassador.terms_consent,
-        createdAt: ambassador.created_at,
-        studentsReferred: studentsCount,
-        bankAccountsCount: bankAccountsCount,
-        subAmbassadorsCount: subAmbassadorsCount,
-      };
     }),
 
   changePassword: publicProcedure
