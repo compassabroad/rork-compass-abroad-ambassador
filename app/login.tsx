@@ -9,52 +9,36 @@ import {
   Platform,
   Alert,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
-  Compass,
   Mail,
   Lock,
   Eye,
   EyeOff,
   AlertCircle,
-  Clock,
-  XCircle,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 
 import Colors from '@/constants/colors';
-
-type UserStatus = 'active' | 'pending_approval' | 'rejected';
-
-interface MockUser {
-  email: string;
-  password: string;
-  status: UserStatus;
-  type: 'student' | 'ambassador';
-}
-
-const MOCK_USERS: MockUser[] = [
-  { email: 'admin@compassabroad.com', password: '123456', status: 'active', type: 'ambassador' },
-  { email: 'student@test.com', password: '123456', status: 'active', type: 'student' },
-  { email: 'pending@test.com', password: '123456', status: 'pending_approval', type: 'ambassador' },
-  { email: 'rejected@test.com', password: '123456', status: 'rejected', type: 'ambassador' },
-];
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const validateEmail = (email: string): boolean => {
+  const validateEmail = (value: string): boolean => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
+    return emailRegex.test(value);
   };
 
   const handleLogin = async () => {
@@ -86,55 +70,37 @@ export default function LoginScreen() {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
 
-    setTimeout(() => {
-      const user = MOCK_USERS.find(
-        (u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password
-      );
-
-      if (!user) {
-        setError('E-posta veya şifre hatalı');
-        setIsLoading(false);
-        return;
-      }
-
-      if (user.status === 'pending_approval') {
-        if (Platform.OS !== 'web') {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-        }
-        Alert.alert(
-          'Onay Bekleniyor',
-          'Başvurunuz henüz onaylanmadı. Lütfen bekleyiniz. Onaylandığında e-posta ile bilgilendirileceksiniz.',
-          [{ text: 'Tamam' }]
-        );
-        setIsLoading(false);
-        return;
-      }
-
-      if (user.status === 'rejected') {
-        if (Platform.OS !== 'web') {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        }
-        Alert.alert(
-          'Başvuru Reddedildi',
-          'Başvurunuz reddedilmiştir. Daha fazla bilgi için destek ekibimizle iletişime geçebilirsiniz.',
-          [{ text: 'Tamam' }]
-        );
-        setIsLoading(false);
-        return;
-      }
+    try {
+      await login(email.trim(), password);
 
       if (Platform.OS !== 'web') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
+      console.log('[Login] Success for:', email);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Giriş yapılamadı. Lütfen tekrar deneyin.';
+      console.log('[Login] Error:', message);
 
-      console.log('Login successful:', user);
-      router.replace('/(tabs)');
+      if (Platform.OS !== 'web') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      }
+
+      setError(message);
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
+  };
+
+  const handleForgotPassword = () => {
+    Alert.alert(
+      'Şifremi Unuttum',
+      'Bu özellik yakında eklenecek. Şu an için destek ekibimizle iletişime geçebilirsiniz.',
+      [{ text: 'Tamam' }]
+    );
   };
 
   const handleRegister = () => {
-    router.push('/onboarding');
+    router.push('/auth/register');
   };
 
   return (
@@ -153,11 +119,18 @@ export default function LoginScreen() {
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.logoContainer}>
-            <View style={styles.logoCircle}>
-              <Compass size={56} color={Colors.secondary} />
+            <View style={styles.logoRing}>
+              <LinearGradient
+                colors={['#FFD700', '#E8B923', '#DAA520']}
+                style={styles.logoRingGradient}
+              >
+                <View style={styles.logoInner}>
+                  <Text style={styles.logoText}>CA</Text>
+                </View>
+              </LinearGradient>
             </View>
             <Text style={styles.title}>Compass Abroad</Text>
-            <Text style={styles.subtitle}>Hesabınıza giriş yapın</Text>
+            <Text style={styles.subtitle}>Ambassador</Text>
           </View>
 
           <View style={styles.formContainer}>
@@ -173,11 +146,12 @@ export default function LoginScreen() {
                   setEmail(text.toLowerCase());
                   setError(null);
                 }}
-                placeholder="ornek@email.com"
+                placeholder="E-posta adresiniz"
                 placeholderTextColor={Colors.textMuted}
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoComplete="email"
+                testID="login-email"
               />
             </View>
 
@@ -194,10 +168,11 @@ export default function LoginScreen() {
                     setPassword(text);
                     setError(null);
                   }}
-                  placeholder="••••••••"
+                  placeholder="Şifreniz"
                   placeholderTextColor={Colors.textMuted}
                   secureTextEntry={!showPassword}
                   autoComplete="password"
+                  testID="login-password"
                 />
                 <TouchableOpacity
                   style={styles.eyeButton}
@@ -223,38 +198,40 @@ export default function LoginScreen() {
               style={[styles.loginButton, isLoading && styles.loginButtonDisabled]}
               onPress={handleLogin}
               disabled={isLoading}
+              testID="login-submit"
             >
-              <Text style={styles.loginButtonText}>
-                {isLoading ? 'Giriş yapılıyor...' : 'Giriş Yap'}
-              </Text>
+              <LinearGradient
+                colors={[Colors.secondary, '#F5D76E']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.loginButtonGradient}
+              >
+                {isLoading ? (
+                  <ActivityIndicator size="small" color={Colors.background} />
+                ) : (
+                  <Text style={styles.loginButtonText}>Giriş Yap</Text>
+                )}
+              </LinearGradient>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.forgotButton}>
+            <TouchableOpacity style={styles.forgotButton} onPress={handleForgotPassword}>
               <Text style={styles.forgotButtonText}>Şifremi Unuttum</Text>
             </TouchableOpacity>
           </View>
 
-          <View style={styles.registerContainer}>
-            <Text style={styles.registerText}>Hesabınız yok mu?</Text>
-            <TouchableOpacity onPress={handleRegister}>
-              <Text style={styles.registerLink}>Kayıt Olun</Text>
-            </TouchableOpacity>
+          <View style={styles.dividerContainer}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>veya</Text>
+            <View style={styles.dividerLine} />
           </View>
 
-          <View style={styles.statusInfoContainer}>
-            <View style={styles.statusInfoItem}>
-              <Clock size={14} color={Colors.warning} />
-              <Text style={styles.statusInfoText}>
-                Elçi başvuruları admin onayı gerektirir
-              </Text>
-            </View>
-            <View style={styles.statusInfoItem}>
-              <XCircle size={14} color={Colors.error} />
-              <Text style={styles.statusInfoText}>
-                Reddedilen başvurular giriş yapamaz
-              </Text>
-            </View>
-          </View>
+          <TouchableOpacity style={styles.registerButton} onPress={handleRegister}>
+            <Text style={styles.registerButtonText}>
+              Hesabınız yok mu? <Text style={styles.registerButtonHighlight}>Kayıt Olun</Text>
+            </Text>
+          </TouchableOpacity>
+
+          <Text style={styles.copyright}>Compass Abroad © 2024</Text>
         </ScrollView>
       </LinearGradient>
     </KeyboardAvoidingView>
@@ -280,24 +257,44 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 40,
   },
-  logoCircle: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: Colors.secondary + '20',
+  logoRing: {
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    marginBottom: 20,
+  },
+  logoRingGradient: {
+    width: 110,
+    height: 110,
+    borderRadius: 55,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 20,
+  },
+  logoInner: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: Colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoText: {
+    fontSize: 36,
+    fontWeight: '800' as const,
+    color: Colors.secondary,
+    letterSpacing: 2,
   },
   title: {
     fontSize: 28,
     fontWeight: '700' as const,
     color: Colors.text,
-    marginBottom: 8,
+    marginBottom: 4,
   },
   subtitle: {
     fontSize: 16,
-    color: Colors.textSecondary,
+    color: Colors.secondary,
+    fontWeight: '500' as const,
+    letterSpacing: 2,
   },
   formContainer: {
     backgroundColor: Colors.surface,
@@ -362,18 +359,21 @@ const styles = StyleSheet.create({
     color: Colors.error,
   },
   loginButton: {
-    backgroundColor: Colors.secondary,
     borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
+    overflow: 'hidden',
     marginBottom: 16,
   },
   loginButtonDisabled: {
     opacity: 0.6,
   },
+  loginButtonGradient: {
+    padding: 16,
+    alignItems: 'center',
+    borderRadius: 12,
+  },
   loginButtonText: {
     fontSize: 16,
-    fontWeight: '600' as const,
+    fontWeight: '700' as const,
     color: Colors.background,
   },
   forgotButton: {
@@ -384,32 +384,40 @@ const styles = StyleSheet.create({
     color: Colors.secondary,
     fontWeight: '500' as const,
   },
-  registerContainer: {
+  dividerContainer: {
     flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
-    gap: 6,
+    marginBottom: 24,
+    paddingHorizontal: 16,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: Colors.border,
+  },
+  dividerText: {
+    fontSize: 13,
+    color: Colors.textMuted,
+    marginHorizontal: 16,
+  },
+  registerButton: {
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
     marginBottom: 32,
   },
-  registerText: {
+  registerButtonText: {
     fontSize: 14,
     color: Colors.textSecondary,
   },
-  registerLink: {
-    fontSize: 14,
+  registerButtonHighlight: {
     fontWeight: '600' as const,
     color: Colors.secondary,
   },
-  statusInfoContainer: {
-    gap: 10,
-    paddingHorizontal: 16,
-  },
-  statusInfoItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  statusInfoText: {
+  copyright: {
+    textAlign: 'center',
     fontSize: 12,
     color: Colors.textMuted,
   },

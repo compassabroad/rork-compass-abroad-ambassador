@@ -4,7 +4,7 @@ import React from "react";
 import { Platform, View, Text, StyleSheet } from "react-native";
 
 import Colors from "@/constants/colors";
-import { MOCK_CURRENT_USER } from "@/mocks/data";
+import { useAuth } from "@/contexts/AuthContext";
 import { useChat } from "@/contexts/ChatContext";
 
 const styles = StyleSheet.create({
@@ -28,7 +28,8 @@ const styles = StyleSheet.create({
 });
 
 export default function TabLayout() {
-  const isAdmin = MOCK_CURRENT_USER.role === 'admin';
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const { unreadCount } = useChat();
 
   return (

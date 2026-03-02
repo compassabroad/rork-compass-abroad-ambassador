@@ -18,6 +18,7 @@ import {
 } from 'lucide-react-native';
 
 import Colors from '@/constants/colors';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function PendingApprovalScreen() {
   const insets = useSafeAreaInsets();
@@ -35,8 +36,11 @@ export default function PendingApprovalScreen() {
     Linking.openURL('https://wa.me/902121234567');
   };
 
-  const handleLogout = () => {
-    router.replace('/onboarding');
+  const { logout } = useAuth();
+
+  const handleLogout = async () => {
+    await logout();
+    router.replace('/login');
   };
 
   return (
