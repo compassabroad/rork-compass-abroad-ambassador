@@ -1,57 +1,54 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  TextInput,
-  KeyboardAvoidingView,
-  Platform,
   Animated,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import {
-  Send,
   Clock,
   CheckCircle,
   AlertCircle,
   Headphones,
   MessageSquare,
-  Ticket,
-  HelpCircle,
+  ChevronRight,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 
 import Colors from '@/constants/colors';
+import { useAuth } from '@/contexts/AuthContext';
 import { useChat } from '@/contexts/ChatContext';
-import { Message } from '@/types';
+import { trpc } from '@/lib/trpc';
 
-const QUICK_QUESTIONS = [
-  'Komisyon oranları nedir?',
-  'Öğrenci nasıl eklerim?',
-  'Ödeme ne zaman yapılır?',
-  'Program detayları nedir?',
-];
+interface ConversationItem {
+  id: string;
+  participantName: string;
+  participantRole: string;
+  lastMessage: string;
+  lastMessageTime: string;
+  unreadCount: number;
+}
 
 export default function ChatScreen() {
   const insets = useSafeAreaInsets();
-  const scrollViewRef = useRef<ScrollView>(null);
-  const {
-    messages,
-    unreadCount,
-    isTyping,
-    workingHours,
-    sendMessage,
-    markAllAsRead,
-    tickets,
-  } = useChat();
-
-  const [inputText, setInputText] = useState('');
-  const [isSending, setIsSending] = useState(false);
+  const router = useRouter();
+  const { token } = useAuth();
+  const { workingHours, refetchUnread } = useChat();
   const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  const conversationsQuery = trpc.chat.getConversations.useQuery(
+    { token: token ?? '' },
+    { enabled: !!token }
+  );
+
+  const conversations = conversationsQuery.data ?? [];
 
   useEffect(() => {
     if (workingHours.isOpen) {
@@ -72,150 +69,95 @@ export default function ChatScreen() {
     }
   }, [workingHours.isOpen, pulseAnim]);
 
-  useEffect(() => {
-    setTimeout(() => {
-      scrollViewRef.current?.scrollToEnd({ animated: false });
-    }, 100);
-  }, []);
-
-  useEffect(() => {
-    if (messages.length > 0) {
-      setTimeout(() => {
-        scrollViewRef.current?.scrollToEnd({ animated: true });
-      }, 100);
-    }
-  }, [messages.length]);
-
-  useEffect(() => {
-    markAllAsRead();
-  }, [markAllAsRead]);
-
-  const handleSend = async () => {
-    if (!inputText.trim() || isSending) return;
-
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setIsSending(true);
-    const text = inputText.trim();
-    setInputText('');
-
-    try {
-      await sendMessage(text);
-    } catch (error) {
-      console.log('Error sending message:', error);
-    } finally {
-      setIsSending(false);
-    }
-  };
-
-  const handleQuickQuestion = (question: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setInputText(question);
-  };
+  const handleRefresh = useCallback(() => {
+    conversationsQuery.refetch();
+    refetchUnread();
+  }, [conversationsQuery, refetchUnread]);
 
   const formatTime = (dateString: string) => {
-    return new Date(dateString).toLocaleTimeString('tr-TR', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
-  const formatDateHeader = (dateString: string) => {
     const date = new Date(dateString);
-    const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffHours = diffMs / (1000 * 60 * 60);
 
-    if (date.toDateString() === today.toDateString()) {
-      return 'Bugün';
-    } else if (date.toDateString() === yesterday.toDateString()) {
+    if (diffHours < 24) {
+      return date.toLocaleTimeString('tr-TR', {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } else if (diffHours < 48) {
       return 'Dün';
     } else {
       return date.toLocaleDateString('tr-TR', {
         day: 'numeric',
-        month: 'long',
-        year: 'numeric',
+        month: 'short',
       });
     }
   };
 
-  const groupMessagesByDate = (msgs: Message[]) => {
-    const groups: { date: string; messages: Message[] }[] = [];
-
-    msgs.forEach((message) => {
-      const dateStr = new Date(message.timestamp).toDateString();
-      const existingGroup = groups.find(
-        (g) => new Date(g.date).toDateString() === dateStr
-      );
-
-      if (existingGroup) {
-        existingGroup.messages.push(message);
-      } else {
-        groups.push({ date: message.timestamp, messages: [message] });
-      }
-    });
-
-    return groups;
+  const getInitials = (name: string): string => {
+    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   };
 
-  const messageGroups = groupMessagesByDate(messages);
-  const openTickets = tickets.filter((t) => t.status !== 'resolved').length;
+  const handleConversationPress = useCallback((conversation: ConversationItem) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push(`/chat/${conversation.id}` as any);
+  }, [router]);
 
-  const renderMessage = (message: Message) => {
-    const isOwn = message.senderId === 'current';
-    const isSystem = message.senderId === 'system';
-    const isTicketMessage = message.isTicket;
-
-    if (isSystem) {
-      return (
-        <View key={message.id} style={styles.systemMessageContainer}>
-          <View style={styles.systemMessage}>
-            <Ticket size={16} color={Colors.warning} style={styles.systemIcon} />
-            <Text style={styles.systemMessageText}>{message.text}</Text>
-          </View>
-        </View>
-      );
-    }
+  const renderConversation = (conversation: ConversationItem) => {
+    const hasUnread = conversation.unreadCount > 0;
 
     return (
-      <View
-        key={message.id}
-        style={[
-          styles.messageBubble,
-          isOwn ? styles.messageBubbleOwn : styles.messageBubbleOther,
-          isTicketMessage && isOwn && styles.messageBubbleTicket,
-        ]}
+      <TouchableOpacity
+        key={conversation.id}
+        style={styles.conversationCard}
+        onPress={() => handleConversationPress(conversation)}
+        activeOpacity={0.7}
+        testID={`conversation-${conversation.id}`}
       >
-        {isTicketMessage && isOwn && (
-          <View style={styles.ticketBadge}>
-            <Ticket size={10} color={Colors.warning} />
-            <Text style={styles.ticketBadgeText}>Talep</Text>
+        <View style={styles.conversationAvatar}>
+          <LinearGradient
+            colors={[Colors.primary, Colors.secondary]}
+            style={styles.avatarGradient}
+          >
+            <Text style={styles.avatarText}>{getInitials(conversation.participantName)}</Text>
+          </LinearGradient>
+          {hasUnread && (
+            <View style={styles.unreadDot} />
+          )}
+        </View>
+        <View style={styles.conversationContent}>
+          <View style={styles.conversationHeader}>
+            <Text style={[styles.conversationName, hasUnread && styles.conversationNameUnread]}>
+              {conversation.participantName}
+            </Text>
+            <Text style={[styles.conversationTime, hasUnread && styles.conversationTimeUnread]}>
+              {formatTime(conversation.lastMessageTime)}
+            </Text>
           </View>
-        )}
-        <Text
-          style={[
-            styles.messageText,
-            isOwn ? styles.messageTextOwn : styles.messageTextOther,
-          ]}
-        >
-          {message.text}
-        </Text>
-        <Text
-          style={[
-            styles.messageTime,
-            isOwn ? styles.messageTimeOwn : styles.messageTimeOther,
-          ]}
-        >
-          {formatTime(message.timestamp)}
-        </Text>
-      </View>
+          <View style={styles.conversationFooter}>
+            <Text
+              style={[styles.conversationLastMessage, hasUnread && styles.conversationLastMessageUnread]}
+              numberOfLines={1}
+            >
+              {conversation.lastMessage}
+            </Text>
+            {hasUnread && (
+              <View style={styles.unreadBadge}>
+                <Text style={styles.unreadBadgeText}>
+                  {conversation.unreadCount > 9 ? '9+' : conversation.unreadCount}
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+        <ChevronRight size={16} color={Colors.textMuted} />
+      </TouchableOpacity>
     );
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
+    <View style={styles.container}>
       <LinearGradient
         colors={[Colors.gradient.middle, Colors.background]}
         style={[styles.header, { paddingTop: insets.top + 12 }]}
@@ -225,7 +167,7 @@ export default function ChatScreen() {
             <View style={styles.avatarContainer}>
               <LinearGradient
                 colors={[Colors.primary, Colors.secondary]}
-                style={styles.avatar}
+                style={styles.headerAvatar}
               >
                 <Headphones size={24} color={Colors.text} />
               </LinearGradient>
@@ -260,12 +202,6 @@ export default function ChatScreen() {
               </View>
             </View>
           </View>
-          {openTickets > 0 && (
-            <View style={styles.ticketCounter}>
-              <Ticket size={14} color={Colors.warning} />
-              <Text style={styles.ticketCounterText}>{openTickets}</Text>
-            </View>
-          )}
         </View>
 
         {!workingHours.isOpen && (
@@ -284,122 +220,37 @@ export default function ChatScreen() {
       </LinearGradient>
 
       <ScrollView
-        ref={scrollViewRef}
-        style={styles.messagesContainer}
-        contentContainerStyle={styles.messagesContent}
+        style={styles.conversationList}
+        contentContainerStyle={styles.conversationListContent}
         showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
+        refreshControl={
+          <RefreshControl
+            refreshing={conversationsQuery.isRefetching}
+            onRefresh={handleRefresh}
+            tintColor={Colors.primary}
+          />
+        }
       >
-        {messages.length === 0 ? (
+        {conversationsQuery.isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={Colors.primary} />
+            <Text style={styles.loadingText}>Sohbetler yükleniyor...</Text>
+          </View>
+        ) : conversations.length === 0 ? (
           <View style={styles.emptyState}>
             <View style={styles.emptyIconContainer}>
               <MessageSquare size={48} color={Colors.primary} />
             </View>
-            <Text style={styles.emptyTitle}>Danışmanınıza Yazın</Text>
+            <Text style={styles.emptyTitle}>Henüz Sohbet Yok</Text>
             <Text style={styles.emptyText}>
-              Programlar, komisyonlar, öğrenci süreçleri veya herhangi bir konuda
-              soru sorabilirsiniz.
+              Destek ekibimizle iletişime geçmek için yeni bir sohbet başlatın.
             </Text>
           </View>
         ) : (
-          messageGroups.map((group, groupIndex) => (
-            <View key={groupIndex}>
-              <View style={styles.dateHeader}>
-                <Text style={styles.dateHeaderText}>
-                  {formatDateHeader(group.date)}
-                </Text>
-              </View>
-              {group.messages.map(renderMessage)}
-            </View>
-          ))
+          conversations.map(renderConversation)
         )}
-
-        {isTyping && (
-          <View style={styles.typingIndicator}>
-            <View style={styles.typingDots}>
-              <View style={[styles.dot, styles.dot1]} />
-              <View style={[styles.dot, styles.dot2]} />
-              <View style={[styles.dot, styles.dot3]} />
-            </View>
-            <Text style={styles.typingText}>Danışman yazıyor...</Text>
-          </View>
-        )}
-
-        <View style={{ height: 10 }} />
       </ScrollView>
-
-      {messages.length < 3 && (
-        <View style={styles.quickQuestionsContainer}>
-          <View style={styles.quickQuestionsHeader}>
-            <HelpCircle size={14} color={Colors.textSecondary} />
-            <Text style={styles.quickQuestionsTitle}>Hızlı Sorular</Text>
-          </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.quickQuestionsScroll}
-          >
-            {QUICK_QUESTIONS.map((question, index) => (
-              <TouchableOpacity
-                key={index}
-                style={styles.quickQuestionButton}
-                onPress={() => handleQuickQuestion(question)}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.quickQuestionText}>{question}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-      )}
-
-      <View style={[styles.inputContainer, { paddingBottom: insets.bottom + 8 }]}>
-        <View style={styles.inputWrapper}>
-          <TextInput
-            style={styles.input}
-            placeholder={
-              workingHours.isOpen
-                ? 'Mesajınızı yazın...'
-                : 'Mesajınızı yazın (talep oluşturulacak)...'
-            }
-            placeholderTextColor={Colors.textMuted}
-            value={inputText}
-            onChangeText={setInputText}
-            multiline
-            maxLength={1000}
-            editable={!isSending}
-          />
-          <TouchableOpacity
-            style={[
-              styles.sendButton,
-              inputText.trim() && !isSending
-                ? styles.sendButtonActive
-                : styles.sendButtonInactive,
-            ]}
-            onPress={handleSend}
-            disabled={!inputText.trim() || isSending}
-            activeOpacity={0.7}
-          >
-            {isSending ? (
-              <ActivityIndicator size="small" color={Colors.primaryDark} />
-            ) : (
-              <Send
-                size={20}
-                color={inputText.trim() ? Colors.primaryDark : Colors.textMuted}
-              />
-            )}
-          </TouchableOpacity>
-        </View>
-        {!workingHours.isOpen && inputText.trim() && (
-          <View style={styles.ticketWarning}>
-            <Ticket size={12} color={Colors.warning} />
-            <Text style={styles.ticketWarningText}>
-              Mesai dışı - Mesajınız talep olarak kaydedilecek
-            </Text>
-          </View>
-        )}
-      </View>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -429,7 +280,7 @@ const styles = StyleSheet.create({
     position: 'relative',
     marginRight: 12,
   },
-  avatar: {
+  headerAvatar: {
     width: 50,
     height: 50,
     borderRadius: 25,
@@ -476,20 +327,6 @@ const styles = StyleSheet.create({
   statusTextOffline: {
     color: Colors.warning,
   },
-  ticketCounter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.warning + '20',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
-    gap: 4,
-  },
-  ticketCounterText: {
-    fontSize: 12,
-    fontWeight: '600' as const,
-    color: Colors.warning,
-  },
   offlineNotice: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -515,11 +352,21 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: Colors.textMuted,
   },
-  messagesContainer: {
+  conversationList: {
     flex: 1,
   },
-  messagesContent: {
+  conversationListContent: {
     padding: 16,
+    paddingBottom: 100,
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: Colors.textSecondary,
   },
   emptyState: {
     alignItems: 'center',
@@ -547,217 +394,96 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
   },
-  dateHeader: {
+  conversationCard: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 16,
-  },
-  dateHeaderText: {
-    fontSize: 12,
-    color: Colors.textMuted,
     backgroundColor: Colors.surface,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 10,
-  },
-  messageBubble: {
-    maxWidth: '80%',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 18,
-    marginBottom: 8,
-  },
-  messageBubbleOwn: {
-    alignSelf: 'flex-end',
-    backgroundColor: Colors.primary,
-    borderBottomRightRadius: 4,
-  },
-  messageBubbleOther: {
-    alignSelf: 'flex-start',
-    backgroundColor: Colors.surface,
-    borderBottomLeftRadius: 4,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  messageBubbleTicket: {
-    backgroundColor: Colors.warning + '30',
-    borderWidth: 1,
-    borderColor: Colors.warning + '50',
-  },
-  ticketBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginBottom: 4,
-  },
-  ticketBadgeText: {
-    fontSize: 10,
-    fontWeight: '600' as const,
-    color: Colors.warning,
-  },
-  messageText: {
-    fontSize: 15,
-    lineHeight: 20,
-  },
-  messageTextOwn: {
-    color: Colors.text,
-  },
-  messageTextOther: {
-    color: Colors.text,
-  },
-  messageTime: {
-    fontSize: 10,
-    marginTop: 4,
-  },
-  messageTimeOwn: {
-    color: Colors.textSecondary,
-    textAlign: 'right' as const,
-  },
-  messageTimeOther: {
-    color: Colors.textMuted,
-  },
-  systemMessageContainer: {
-    alignItems: 'center',
-    marginVertical: 8,
-  },
-  systemMessage: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: Colors.warning + '15',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 12,
-    maxWidth: '90%',
-    borderWidth: 1,
-    borderColor: Colors.warning + '30',
-  },
-  systemIcon: {
-    marginRight: 8,
-    marginTop: 2,
-  },
-  systemMessageText: {
-    flex: 1,
-    fontSize: 13,
-    color: Colors.text,
-    lineHeight: 18,
-  },
-  typingIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    backgroundColor: Colors.surface,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 18,
-    borderBottomLeftRadius: 4,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    gap: 8,
-  },
-  typingDots: {
-    flexDirection: 'row',
-    gap: 4,
-  },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: Colors.textMuted,
-  },
-  dot1: {
-    opacity: 0.4,
-  },
-  dot2: {
-    opacity: 0.6,
-  },
-  dot3: {
-    opacity: 0.8,
-  },
-  typingText: {
-    fontSize: 12,
-    color: Colors.textMuted,
-  },
-  quickQuestionsContainer: {
-    backgroundColor: Colors.surface,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-    paddingTop: 12,
-  },
-  quickQuestionsHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 16,
-    marginBottom: 8,
-  },
-  quickQuestionsTitle: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    fontWeight: '500' as const,
-  },
-  quickQuestionsScroll: {
-    paddingHorizontal: 12,
-    paddingBottom: 8,
-    gap: 8,
-  },
-  quickQuestionButton: {
-    backgroundColor: Colors.primary + '20',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
     borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Colors.primary + '30',
-    marginHorizontal: 4,
+    padding: 14,
+    marginBottom: 10,
   },
-  quickQuestionText: {
-    fontSize: 13,
-    color: Colors.primary,
-    fontWeight: '500' as const,
+  conversationAvatar: {
+    position: 'relative',
+    marginRight: 12,
   },
-  inputContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    backgroundColor: Colors.surface,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-  },
-  inputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    backgroundColor: Colors.surfaceElevated,
-    borderRadius: 24,
-    paddingLeft: 16,
-    paddingRight: 6,
-    paddingVertical: 6,
-  },
-  input: {
-    flex: 1,
-    fontSize: 15,
-    color: Colors.text,
-    maxHeight: 100,
-    paddingVertical: 8,
-  },
-  sendButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  avatarGradient: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sendButtonActive: {
+  avatarText: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+    color: Colors.text,
+  },
+  unreadDot: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
     backgroundColor: Colors.secondary,
+    borderWidth: 2,
+    borderColor: Colors.surface,
   },
-  sendButtonInactive: {
-    backgroundColor: Colors.surface,
+  conversationContent: {
+    flex: 1,
+    marginRight: 8,
   },
-  ticketWarning: {
+  conversationHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  conversationName: {
+    fontSize: 15,
+    fontWeight: '500' as const,
+    color: Colors.text,
+    flex: 1,
+  },
+  conversationNameUnread: {
+    fontWeight: '700' as const,
+  },
+  conversationTime: {
+    fontSize: 11,
+    color: Colors.textMuted,
+    marginLeft: 8,
+  },
+  conversationTimeUnread: {
+    color: Colors.secondary,
+    fontWeight: '600' as const,
+  },
+  conversationFooter: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginTop: 8,
-    paddingHorizontal: 4,
+    justifyContent: 'space-between',
   },
-  ticketWarningText: {
+  conversationLastMessage: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+    flex: 1,
+  },
+  conversationLastMessageUnread: {
+    color: Colors.text,
+    fontWeight: '500' as const,
+  },
+  unreadBadge: {
+    backgroundColor: Colors.secondary,
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+    marginLeft: 8,
+  },
+  unreadBadgeText: {
     fontSize: 11,
-    color: Colors.warning,
+    fontWeight: '700' as const,
+    color: Colors.primaryDark,
   },
 });

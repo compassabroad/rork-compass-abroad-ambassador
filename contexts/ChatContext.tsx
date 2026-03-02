@@ -1,8 +1,8 @@
 import { useState, useCallback, useEffect } from 'react';
 import createContextHook from '@nkzw/create-context-hook';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Message, ChatTicket } from '@/types';
-import { MOCK_CURRENT_AMBASSADOR } from '@/mocks/data';
+import { useAuth } from '@/contexts/AuthContext';
+import { trpc } from '@/lib/trpc';
 
 interface WorkingHours {
   isOpen: boolean;
@@ -82,49 +82,25 @@ const checkWorkingHours = (): WorkingHours => {
   };
 };
 
-const INITIAL_MESSAGES: Message[] = [
-  {
-    id: 'welcome-1',
-    text: 'Merhaba! Compass Abroad Danışman Ekibine hoş geldiniz. 👋',
-    senderId: 'consultant',
-    timestamp: new Date(Date.now() - 86400000).toISOString(),
-    read: true,
-  },
-  {
-    id: 'welcome-2',
-    text: 'Size programlar, komisyonlar, öğrenci süreçleri ve daha fazlası hakkında yardımcı olabiliriz. Sormak istediğiniz her şeyi yazabilirsiniz!',
-    senderId: 'consultant',
-    timestamp: new Date(Date.now() - 86400000 + 1000).toISOString(),
-    read: true,
-  },
-];
-
 export const [ChatProvider, useChat] = createContextHook(() => {
-  const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES);
-  const [tickets, setTickets] = useState<ChatTicket[]>([]);
+  const { token, isAuthenticated } = useAuth();
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [tickets] = useState<ChatTicket[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isTyping, setIsTyping] = useState(false);
   const [workingHours, setWorkingHours] = useState<WorkingHours>(checkWorkingHours());
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+
+  const unreadQuery = trpc.chat.getUnreadCount.useQuery(
+    { token: token ?? '' },
+    { enabled: !!token && isAuthenticated, refetchInterval: 30000 }
+  );
 
   useEffect(() => {
-    const loadData = async () => {
-      try {
-        const storedMessages = await AsyncStorage.getItem('chat_messages');
-        const storedTickets = await AsyncStorage.getItem('chat_tickets');
-        
-        if (storedMessages) {
-          const parsed = JSON.parse(storedMessages);
-          setMessages(parsed.length > 0 ? parsed : INITIAL_MESSAGES);
-        }
-        if (storedTickets) {
-          setTickets(JSON.parse(storedTickets));
-        }
-      } catch (error) {
-        console.log('Error loading chat data:', error);
-      }
-    };
-    loadData();
-  }, []);
+    if (unreadQuery.data) {
+      setUnreadCount(unreadQuery.data.unreadCount);
+    }
+  }, [unreadQuery.data]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -133,84 +109,18 @@ export const [ChatProvider, useChat] = createContextHook(() => {
     return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    const count = messages.filter(m => !m.read && m.senderId !== 'current').length;
-    setUnreadCount(count);
-  }, [messages]);
-
-  const saveMessages = useCallback(async (newMessages: Message[]) => {
-    try {
-      await AsyncStorage.setItem('chat_messages', JSON.stringify(newMessages));
-    } catch (error) {
-      console.log('Error saving messages:', error);
-    }
-  }, []);
-
-  const saveTickets = useCallback(async (newTickets: ChatTicket[]) => {
-    try {
-      await AsyncStorage.setItem('chat_tickets', JSON.stringify(newTickets));
-    } catch (error) {
-      console.log('Error saving tickets:', error);
-    }
-  }, []);
-
   const sendMessage = useCallback(async (text: string): Promise<{ isTicket: boolean; ticketId?: string }> => {
-    const currentHours = checkWorkingHours();
-    const isOutsideHours = !currentHours.isOpen;
-
     const newMessage: Message = {
       id: `msg-${Date.now()}`,
       text,
       senderId: 'current',
       timestamp: new Date().toISOString(),
       read: true,
-      isTicket: isOutsideHours,
     };
 
-    let ticketId: string | undefined;
-
-    if (isOutsideHours) {
-      ticketId = `ticket-${Date.now()}`;
-      const newTicket: ChatTicket = {
-        id: ticketId,
-        subject: text.substring(0, 50) + (text.length > 50 ? '...' : ''),
-        message: text,
-        createdAt: new Date().toISOString(),
-        status: 'open',
-        priority: 'medium',
-        ambassadorId: MOCK_CURRENT_AMBASSADOR.id,
-        ambassadorName: MOCK_CURRENT_AMBASSADOR.name,
-        responses: [],
-      };
-
-      newMessage.ticketId = ticketId;
-
-      const updatedTickets = [...tickets, newTicket];
-      setTickets(updatedTickets);
-      saveTickets(updatedTickets);
-
-      const ticketNotification: Message = {
-        id: `msg-${Date.now()}-ticket`,
-        text: `📋 Talebiniz alındı! (Talep No: #${ticketId.slice(-6).toUpperCase()})\n\nMesai saatleri dışında olduğumuz için mesajınız talep olarak kaydedildi. En kısa sürede size dönüş yapacağız.\n\n⏰ Mesai Saatlerimiz:\n• Hafta içi: 09:30 - 18:30\n• Cumartesi: 12:30 - 16:30\n• Pazar: Kapalı`,
-        senderId: 'system',
-        timestamp: new Date(Date.now() + 100).toISOString(),
-        read: false,
-        isTicket: true,
-        ticketId,
-      };
-
-      const updatedMessages = [...messages, newMessage, ticketNotification];
-      setMessages(updatedMessages);
-      saveMessages(updatedMessages);
-
-      return { isTicket: true, ticketId };
-    }
-
-    const updatedMessages = [...messages, newMessage];
-    setMessages(updatedMessages);
-    saveMessages(updatedMessages);
-
+    setMessages(prev => [...prev, newMessage]);
     setIsTyping(true);
+
     setTimeout(() => {
       const autoReply: Message = {
         id: `msg-${Date.now()}-reply`,
@@ -219,25 +129,20 @@ export const [ChatProvider, useChat] = createContextHook(() => {
         timestamp: new Date().toISOString(),
         read: false,
       };
-      
-      const withReply = [...updatedMessages, autoReply];
-      setMessages(withReply);
-      saveMessages(withReply);
+      setMessages(prev => [...prev, autoReply]);
       setIsTyping(false);
     }, 1500);
 
     return { isTicket: false };
-  }, [messages, tickets, saveMessages, saveTickets]);
+  }, []);
 
   const markAllAsRead = useCallback(() => {
     setMessages(prev => {
       const hasUnread = prev.some(m => !m.read);
       if (!hasUnread) return prev;
-      const updated = prev.map(m => ({ ...m, read: true }));
-      saveMessages(updated);
-      return updated;
+      return prev.map(m => ({ ...m, read: true }));
     });
-  }, [saveMessages]);
+  }, []);
 
   const getLastMessage = useCallback(() => {
     if (messages.length === 0) return null;
@@ -245,9 +150,12 @@ export const [ChatProvider, useChat] = createContextHook(() => {
   }, [messages]);
 
   const clearChat = useCallback(async () => {
-    setMessages(INITIAL_MESSAGES);
-    await AsyncStorage.removeItem('chat_messages');
+    setMessages([]);
   }, []);
+
+  const refetchUnread = useCallback(() => {
+    unreadQuery.refetch();
+  }, [unreadQuery]);
 
   return {
     messages,
@@ -260,5 +168,8 @@ export const [ChatProvider, useChat] = createContextHook(() => {
     getLastMessage,
     clearChat,
     checkWorkingHours,
+    activeConversationId,
+    setActiveConversationId,
+    refetchUnread,
   };
 });

@@ -7,6 +7,8 @@ import {
   TouchableOpacity,
   Linking,
   Platform,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -20,18 +22,38 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 
 import Colors from '@/constants/colors';
-import { MOCK_TEAM_MEMBERS, PROGRAMS } from '@/mocks/data';
-import { TeamMember, ProgramType } from '@/types';
+import { useAuth } from '@/contexts/AuthContext';
+import { trpc } from '@/lib/trpc';
+import { PROGRAMS } from '@/mocks/data';
+import { ProgramType } from '@/types';
+
+interface TeamMemberData {
+  id: string;
+  name: string;
+  title: string;
+  expertiseAreas: string[];
+  languages: string[];
+  availability: 'available' | 'busy';
+  email: string;
+  phone: string;
+}
 
 export default function TeamScreen() {
+  const { token } = useAuth();
   const [selectedFilter, setSelectedFilter] = useState<ProgramType | null>(null);
 
+  const teamQuery = trpc.team.list.useQuery(
+    { token: token ?? '' },
+    { enabled: !!token }
+  );
+
   const filteredTeam = useMemo(() => {
-    if (!selectedFilter) return MOCK_TEAM_MEMBERS;
-    return MOCK_TEAM_MEMBERS.filter(member =>
+    const members: TeamMemberData[] = teamQuery.data ?? [];
+    if (!selectedFilter) return members;
+    return members.filter(member =>
       member.expertiseAreas.includes(selectedFilter)
     );
-  }, [selectedFilter]);
+  }, [selectedFilter, teamQuery.data]);
 
   const handleCall = useCallback((phone: string) => {
     const phoneUrl = Platform.OS === 'ios' ? `tel:${phone}` : `tel:${phone}`;
@@ -48,7 +70,7 @@ export default function TeamScreen() {
     Linking.openURL(whatsappUrl).catch(err => console.log('Error opening WhatsApp:', err));
   }, []);
 
-  const getProgramName = useCallback((programId: ProgramType): string => {
+  const getProgramName = useCallback((programId: string): string => {
     const program = PROGRAMS.find(p => p.id === programId);
     return program?.name || programId;
   }, []);
@@ -81,7 +103,7 @@ export default function TeamScreen() {
     );
   };
 
-  const renderTeamMember = (member: TeamMember) => {
+  const renderTeamMember = (member: TeamMemberData) => {
     const isAvailable = member.availability === 'available';
 
     return (
@@ -207,8 +229,20 @@ export default function TeamScreen() {
         style={styles.content}
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={teamQuery.isRefetching}
+            onRefresh={() => teamQuery.refetch()}
+            tintColor={Colors.primary}
+          />
+        }
       >
-        {filteredTeam.length > 0 ? (
+        {teamQuery.isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={Colors.primary} />
+            <Text style={styles.loadingText}>Ekip bilgileri yükleniyor...</Text>
+          </View>
+        ) : filteredTeam.length > 0 ? (
           filteredTeam.map(renderTeamMember)
         ) : (
           <View style={styles.emptyState}>
@@ -300,6 +334,15 @@ const styles = StyleSheet.create({
   contentContainer: {
     padding: 20,
     paddingBottom: 100,
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: Colors.textSecondary,
   },
   memberCard: {
     backgroundColor: Colors.surface,

@@ -7,6 +7,8 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -25,35 +27,85 @@ import {
   UserCog,
   ArrowRight,
   Briefcase,
+  CreditCard,
+  Wallet,
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import Colors from '@/constants/colors';
-import {
-  MOCK_CURRENT_USER,
-  MOCK_PENDING_AMBASSADORS,
-  getAllAmbassadors,
-  MOCK_STUDENTS,
-  MOCK_EARNINGS,
-  MOCK_NAME_CHANGE_REQUESTS,
-} from '@/mocks/data';
-import { PendingAmbassador, Ambassador, AMBASSADOR_TYPE_LABELS, NameChangeRequest } from '@/types';
+import { useAuth } from '@/contexts/AuthContext';
+import { trpc } from '@/lib/trpc';
+import { AMBASSADOR_TYPE_LABELS } from '@/types';
 
 export default function AdminScreen() {
   const router = useRouter();
-  const [pendingAmbassadors, setPendingAmbassadors] = useState<PendingAmbassador[]>(MOCK_PENDING_AMBASSADORS);
-  const [nameChangeRequests, setNameChangeRequests] = useState<NameChangeRequest[]>(MOCK_NAME_CHANGE_REQUESTS);
+  const { user, token } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
-  const allAmbassadors = getAllAmbassadors();
 
-  const isAdmin = MOCK_CURRENT_USER.role === 'admin';
+  const isAdmin = user?.role === 'admin';
 
-  const stats = {
-    totalAmbassadors: allAmbassadors.length,
-    pendingApproval: pendingAmbassadors.filter(a => a.status === 'pending').length,
-    totalStudents: MOCK_STUDENTS.length,
-    totalEarnings: MOCK_EARNINGS.totalUSD,
+  const statsQuery = trpc.admin.getDashboardStats.useQuery(
+    { token: token ?? '' },
+    { enabled: !!token && isAdmin }
+  );
+
+  const pendingAmbassadorsQuery = trpc.admin.getPendingAmbassadors.useQuery(
+    { token: token ?? '' },
+    { enabled: !!token && isAdmin }
+  );
+
+  const nameChangeQuery = trpc.admin.getNameChangeRequests.useQuery(
+    { token: token ?? '' },
+    { enabled: !!token && isAdmin }
+  );
+
+  const pendingBanksQuery = trpc.admin.getPendingBankAccounts.useQuery(
+    { token: token ?? '' },
+    { enabled: !!token && isAdmin }
+  );
+
+  const pendingWithdrawalsQuery = trpc.admin.getPendingWithdrawals.useQuery(
+    { token: token ?? '' },
+    { enabled: !!token && isAdmin }
+  );
+
+  const allAmbassadorsQuery = trpc.admin.getAllAmbassadors.useQuery(
+    { token: token ?? '', search: searchQuery || undefined },
+    { enabled: !!token && isAdmin }
+  );
+
+  const approveAmbassadorMutation = trpc.admin.approveAmbassador.useMutation();
+  const rejectAmbassadorMutation = trpc.admin.rejectAmbassador.useMutation();
+  const approveNameChangeMutation = trpc.admin.approveNameChange.useMutation();
+  const rejectNameChangeMutation = trpc.admin.rejectNameChange.useMutation();
+  const approveBankMutation = trpc.admin.approveBankAccount.useMutation();
+  const rejectBankMutation = trpc.admin.rejectBankAccount.useMutation();
+  const approveWithdrawalMutation = trpc.admin.approveWithdrawal.useMutation();
+  const rejectWithdrawalMutation = trpc.admin.rejectWithdrawal.useMutation();
+
+  const stats = statsQuery.data ?? {
+    totalAmbassadors: 0,
+    totalStudents: 0,
+    pendingApprovals: 0,
+    pendingWithdrawals: 0,
+    pendingBankAccounts: 0,
+    pendingNameChanges: 0,
   };
+
+  const pendingList = pendingAmbassadorsQuery.data ?? [];
+  const pendingNameChanges = nameChangeQuery.data ?? [];
+  const pendingBanks = pendingBanksQuery.data ?? [];
+  const pendingWithdrawals = pendingWithdrawalsQuery.data ?? [];
+  const allAmbassadors = allAmbassadorsQuery.data ?? [];
+
+  const refetchAll = useCallback(() => {
+    statsQuery.refetch();
+    pendingAmbassadorsQuery.refetch();
+    nameChangeQuery.refetch();
+    pendingBanksQuery.refetch();
+    pendingWithdrawalsQuery.refetch();
+    allAmbassadorsQuery.refetch();
+  }, [statsQuery, pendingAmbassadorsQuery, nameChangeQuery, pendingBanksQuery, pendingWithdrawalsQuery, allAmbassadorsQuery]);
 
   const handleApprove = useCallback((id: string) => {
     Alert.alert(
@@ -63,16 +115,19 @@ export default function AdminScreen() {
         { text: 'İptal', style: 'cancel' },
         {
           text: 'Onayla',
-          onPress: () => {
-            setPendingAmbassadors(prev =>
-              prev.map(a => (a.id === id ? { ...a, status: 'approved' as const } : a))
-            );
-            console.log('Ambassador approved:', id);
+          onPress: async () => {
+            try {
+              await approveAmbassadorMutation.mutateAsync({ token: token ?? '', ambassadorId: id });
+              Alert.alert('Başarılı', 'Elçi başarıyla onaylandı.');
+              refetchAll();
+            } catch (error: any) {
+              Alert.alert('Hata', error.message || 'Bir hata oluştu');
+            }
           },
         },
       ]
     );
-  }, []);
+  }, [token, approveAmbassadorMutation, refetchAll]);
 
   const handleReject = useCallback((id: string) => {
     Alert.alert(
@@ -83,18 +138,21 @@ export default function AdminScreen() {
         {
           text: 'Reddet',
           style: 'destructive',
-          onPress: () => {
-            setPendingAmbassadors(prev =>
-              prev.map(a => (a.id === id ? { ...a, status: 'rejected' as const } : a))
-            );
-            console.log('Ambassador rejected:', id);
+          onPress: async () => {
+            try {
+              await rejectAmbassadorMutation.mutateAsync({ token: token ?? '', ambassadorId: id });
+              Alert.alert('Reddedildi', 'Elçi başvurusu reddedildi.');
+              refetchAll();
+            } catch (error: any) {
+              Alert.alert('Hata', error.message || 'Bir hata oluştu');
+            }
           },
         },
       ]
     );
-  }, []);
+  }, [token, rejectAmbassadorMutation, refetchAll]);
 
-  const handleApproveNameChange = useCallback((request: NameChangeRequest) => {
+  const handleApproveNameChange = useCallback((request: { id: string; currentFirstName: string; currentLastName: string; requestedFirstName: string; requestedLastName: string }) => {
     Alert.alert(
       'İsim Değişikliğini Onayla',
       `"${request.currentFirstName} ${request.currentLastName}" → "${request.requestedFirstName} ${request.requestedLastName}" olarak değiştirilsin mi?`,
@@ -102,19 +160,21 @@ export default function AdminScreen() {
         { text: 'İptal', style: 'cancel' },
         {
           text: 'Onayla',
-          onPress: () => {
-            setNameChangeRequests(prev =>
-              prev.map(r => (r.id === request.id ? { ...r, status: 'approved' as const } : r))
-            );
-            console.log('Name change approved:', request);
-            Alert.alert('Başarılı', 'İsim değişikliği onaylandı.');
+          onPress: async () => {
+            try {
+              await approveNameChangeMutation.mutateAsync({ token: token ?? '', requestId: request.id });
+              Alert.alert('Başarılı', 'İsim değişikliği onaylandı.');
+              refetchAll();
+            } catch (error: any) {
+              Alert.alert('Hata', error.message || 'Bir hata oluştu');
+            }
           },
         },
       ]
     );
-  }, []);
+  }, [token, approveNameChangeMutation, refetchAll]);
 
-  const handleRejectNameChange = useCallback((request: NameChangeRequest) => {
+  const handleRejectNameChange = useCallback((request: { id: string }) => {
     Alert.alert(
       'İsim Değişikliğini Reddet',
       'Bu isim değişikliği talebini reddetmek istediğinize emin misiniz?',
@@ -123,27 +183,109 @@ export default function AdminScreen() {
         {
           text: 'Reddet',
           style: 'destructive',
-          onPress: () => {
-            setNameChangeRequests(prev =>
-              prev.map(r => (r.id === request.id ? { ...r, status: 'rejected' as const } : r))
-            );
-            console.log('Name change rejected:', request);
-            Alert.alert('Reddedildi', 'İsim değişikliği talebi reddedildi.');
+          onPress: async () => {
+            try {
+              await rejectNameChangeMutation.mutateAsync({ token: token ?? '', requestId: request.id });
+              Alert.alert('Reddedildi', 'İsim değişikliği talebi reddedildi.');
+              refetchAll();
+            } catch (error: any) {
+              Alert.alert('Hata', error.message || 'Bir hata oluştu');
+            }
           },
         },
       ]
     );
-  }, []);
+  }, [token, rejectNameChangeMutation, refetchAll]);
 
-  const filteredAmbassadors = allAmbassadors.filter(
-    a =>
-      a.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      a.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      a.referralCode.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const handleApproveBankAccount = useCallback((id: string) => {
+    Alert.alert(
+      'Banka Hesabını Onayla',
+      'Bu banka hesabını onaylamak istediğinize emin misiniz?',
+      [
+        { text: 'İptal', style: 'cancel' },
+        {
+          text: 'Onayla',
+          onPress: async () => {
+            try {
+              await approveBankMutation.mutateAsync({ token: token ?? '', bankAccountId: id });
+              Alert.alert('Başarılı', 'Banka hesabı onaylandı.');
+              refetchAll();
+            } catch (error: any) {
+              Alert.alert('Hata', error.message || 'Bir hata oluştu');
+            }
+          },
+        },
+      ]
+    );
+  }, [token, approveBankMutation, refetchAll]);
 
-  const pendingList = pendingAmbassadors.filter(a => a.status === 'pending');
-  const pendingNameChanges = nameChangeRequests.filter(r => r.status === 'pending');
+  const handleRejectBankAccount = useCallback((id: string) => {
+    Alert.alert(
+      'Banka Hesabını Reddet',
+      'Bu banka hesabını reddetmek istediğinize emin misiniz?',
+      [
+        { text: 'İptal', style: 'cancel' },
+        {
+          text: 'Reddet',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await rejectBankMutation.mutateAsync({ token: token ?? '', bankAccountId: id });
+              Alert.alert('Reddedildi', 'Banka hesabı reddedildi.');
+              refetchAll();
+            } catch (error: any) {
+              Alert.alert('Hata', error.message || 'Bir hata oluştu');
+            }
+          },
+        },
+      ]
+    );
+  }, [token, rejectBankMutation, refetchAll]);
+
+  const handleApproveWithdrawal = useCallback((id: string) => {
+    Alert.alert(
+      'Çekim Talebini Onayla',
+      'Bu çekim talebini onaylamak istediğinize emin misiniz?',
+      [
+        { text: 'İptal', style: 'cancel' },
+        {
+          text: 'Onayla',
+          onPress: async () => {
+            try {
+              await approveWithdrawalMutation.mutateAsync({ token: token ?? '', withdrawalId: id });
+              Alert.alert('Başarılı', 'Çekim talebi onaylandı.');
+              refetchAll();
+            } catch (error: any) {
+              Alert.alert('Hata', error.message || 'Bir hata oluştu');
+            }
+          },
+        },
+      ]
+    );
+  }, [token, approveWithdrawalMutation, refetchAll]);
+
+  const handleRejectWithdrawal = useCallback((id: string) => {
+    Alert.alert(
+      'Çekim Talebini Reddet',
+      'Bu çekim talebini reddetmek istediğinize emin misiniz?',
+      [
+        { text: 'İptal', style: 'cancel' },
+        {
+          text: 'Reddet',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await rejectWithdrawalMutation.mutateAsync({ token: token ?? '', withdrawalId: id });
+              Alert.alert('Reddedildi', 'Çekim talebi reddedildi.');
+              refetchAll();
+            } catch (error: any) {
+              Alert.alert('Hata', error.message || 'Bir hata oluştu');
+            }
+          },
+        },
+      ]
+    );
+  }, [token, rejectWithdrawalMutation, refetchAll]);
 
   if (!isAdmin) {
     return (
@@ -183,7 +325,7 @@ export default function AdminScreen() {
     </View>
   );
 
-  const renderPendingAmbassador = (ambassador: PendingAmbassador) => (
+  const renderPendingAmbassador = (ambassador: { id: string; name: string; email: string; registrationDate: string; referredBy?: string }) => (
     <View key={ambassador.id} style={styles.pendingCard}>
       <View style={styles.pendingInfo}>
         <View style={styles.pendingAvatar}>
@@ -223,43 +365,50 @@ export default function AdminScreen() {
     </View>
   );
 
-  const renderAmbassadorItem = (ambassador: Ambassador) => (
-    <TouchableOpacity
-      key={ambassador.id}
-      style={styles.ambassadorItem}
-      onPress={() => router.push(`/admin/ambassador-commissions/${ambassador.id}` as any)}
-      testID={`ambassador-${ambassador.id}`}
-    >
-      <View style={styles.ambassadorAvatar}>
-        <Text style={styles.ambassadorAvatarText}>
-          {ambassador.name.split(' ').map(n => n[0]).join('')}
-        </Text>
-      </View>
-      <View style={styles.ambassadorInfo}>
-        <Text style={styles.ambassadorName}>{ambassador.name}</Text>
-        <Text style={styles.ambassadorEmail}>{ambassador.email}</Text>
-        <View style={styles.ambassadorMeta}>
-          <View
-            style={[
-              styles.typeBadge,
-              { backgroundColor: AMBASSADOR_TYPE_LABELS[ambassador.type].color + '30' },
-            ]}
-          >
-            <Text
-              style={[
-                styles.typeBadgeText,
-                { color: AMBASSADOR_TYPE_LABELS[ambassador.type].color },
-              ]}
-            >
-              {AMBASSADOR_TYPE_LABELS[ambassador.type].tr}
-            </Text>
-          </View>
-          <Text style={styles.ambassadorCode}>{ambassador.referralCode}</Text>
+  const renderAmbassadorItem = (ambassador: { id: string; name: string; email: string; type: string; referralCode: string }) => {
+    const typeKey = ambassador.type as keyof typeof AMBASSADOR_TYPE_LABELS;
+    const typeLabel = AMBASSADOR_TYPE_LABELS[typeKey];
+
+    return (
+      <TouchableOpacity
+        key={ambassador.id}
+        style={styles.ambassadorItem}
+        onPress={() => router.push(`/admin/ambassador-commissions/${ambassador.id}` as any)}
+        testID={`ambassador-${ambassador.id}`}
+      >
+        <View style={styles.ambassadorAvatar}>
+          <Text style={styles.ambassadorAvatarText}>
+            {ambassador.name.split(' ').map(n => n[0]).join('')}
+          </Text>
         </View>
-      </View>
-      <ChevronRight color={Colors.textMuted} size={20} />
-    </TouchableOpacity>
-  );
+        <View style={styles.ambassadorInfo}>
+          <Text style={styles.ambassadorName}>{ambassador.name}</Text>
+          <Text style={styles.ambassadorEmail}>{ambassador.email}</Text>
+          <View style={styles.ambassadorMeta}>
+            {typeLabel && (
+              <View
+                style={[
+                  styles.typeBadge,
+                  { backgroundColor: typeLabel.color + '30' },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.typeBadgeText,
+                    { color: typeLabel.color },
+                  ]}
+                >
+                  {typeLabel.tr}
+                </Text>
+              </View>
+            )}
+            <Text style={styles.ambassadorCode}>{ambassador.referralCode}</Text>
+          </View>
+        </View>
+        <ChevronRight color={Colors.textMuted} size={20} />
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -288,168 +437,274 @@ export default function AdminScreen() {
         style={styles.content}
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={statsQuery.isRefetching}
+            onRefresh={refetchAll}
+            tintColor={Colors.primary}
+          />
+        }
       >
-        <View style={styles.statsGrid}>
-          {renderStatCard(
-            <Users color={Colors.info} size={20} />,
-            'Toplam Elçi',
-            stats.totalAmbassadors,
-            Colors.info
-          )}
-          {renderStatCard(
-            <UserCheck color={Colors.warning} size={20} />,
-            'Onay Bekleyen',
-            stats.pendingApproval,
-            Colors.warning
-          )}
-          {renderStatCard(
-            <GraduationCap color={Colors.success} size={20} />,
-            'Toplam Öğrenci',
-            stats.totalStudents,
-            Colors.success
-          )}
-          {renderStatCard(
-            <DollarSign color={Colors.secondary} size={20} />,
-            'Toplam Kazanç',
-            `$${stats.totalEarnings.toLocaleString()}`,
-            Colors.secondary
-          )}
-        </View>
-
-        <TouchableOpacity
-          style={styles.commissionsLink}
-          onPress={() => router.push('/admin/program-commissions')}
-        >
-          <View style={styles.commissionsLinkContent}>
-            <View style={styles.commissionsIconContainer}>
-              <DollarSign color={Colors.secondary} size={24} />
-            </View>
-            <View style={styles.commissionsTextContainer}>
-              <Text style={styles.commissionsLinkTitle}>Program Komisyonları</Text>
-              <Text style={styles.commissionsLinkSubtitle}>
-                Tüm programlar için komisyon oranlarını düzenle
-              </Text>
-            </View>
+        {statsQuery.isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={Colors.primary} />
+            <Text style={styles.loadingText}>Veriler yükleniyor...</Text>
           </View>
-          <ChevronRight color={Colors.textMuted} size={24} />
-        </TouchableOpacity>
+        ) : (
+          <>
+            <View style={styles.statsGrid}>
+              {renderStatCard(
+                <Users color={Colors.info} size={20} />,
+                'Toplam Elçi',
+                stats.totalAmbassadors,
+                Colors.info
+              )}
+              {renderStatCard(
+                <UserCheck color={Colors.warning} size={20} />,
+                'Onay Bekleyen',
+                stats.pendingApprovals,
+                Colors.warning
+              )}
+              {renderStatCard(
+                <GraduationCap color={Colors.success} size={20} />,
+                'Toplam Öğrenci',
+                stats.totalStudents,
+                Colors.success
+              )}
+              {renderStatCard(
+                <Wallet color={Colors.secondary} size={20} />,
+                'Çekim Bekleyen',
+                stats.pendingWithdrawals,
+                Colors.secondary
+              )}
+            </View>
 
-        <TouchableOpacity
-          style={styles.commissionsLink}
-          onPress={() => router.push('/admin/social-media')}
-          testID="social-media-button"
-        >
-          <View style={styles.commissionsLinkContent}>
-            <View style={[styles.commissionsIconContainer, { backgroundColor: '#E4405F20' }]}>
-              <Share2 color="#E4405F" size={24} />
-            </View>
-            <View style={styles.commissionsTextContainer}>
-              <Text style={styles.commissionsLinkTitle}>Sosyal Medya Linkleri</Text>
-              <Text style={styles.commissionsLinkSubtitle}>
-                Instagram, LinkedIn, Twitter ve Facebook linklerini yönet
-              </Text>
-            </View>
-          </View>
-          <ChevronRight color={Colors.textMuted} size={24} />
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.commissionsLink}
-          onPress={() => router.push('/admin/team')}
-          testID="team-management-button"
-        >
-          <View style={styles.commissionsLinkContent}>
-            <View style={[styles.commissionsIconContainer, { backgroundColor: Colors.info + '20' }]}>
-              <Briefcase color={Colors.info} size={24} />
-            </View>
-            <View style={styles.commissionsTextContainer}>
-              <Text style={styles.commissionsLinkTitle}>Danışman Ekibi</Text>
-              <Text style={styles.commissionsLinkSubtitle}>
-                Ekip üyelerini ekle, düzenle ve yönet
-              </Text>
-            </View>
-          </View>
-          <ChevronRight color={Colors.textMuted} size={24} />
-        </TouchableOpacity>
-
-        {pendingNameChanges.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>İsim Değişikliği Talepleri</Text>
-              <View style={[styles.pendingBadge, { backgroundColor: Colors.info }]}>
-                <Text style={styles.pendingBadgeText}>{pendingNameChanges.length}</Text>
+            <TouchableOpacity
+              style={styles.commissionsLink}
+              onPress={() => router.push('/admin/program-commissions')}
+            >
+              <View style={styles.commissionsLinkContent}>
+                <View style={styles.commissionsIconContainer}>
+                  <DollarSign color={Colors.secondary} size={24} />
+                </View>
+                <View style={styles.commissionsTextContainer}>
+                  <Text style={styles.commissionsLinkTitle}>Program Komisyonları</Text>
+                  <Text style={styles.commissionsLinkSubtitle}>
+                    Tüm programlar için komisyon oranlarını düzenle
+                  </Text>
+                </View>
               </View>
-            </View>
-            {pendingNameChanges.map((request) => (
-              <View key={request.id} style={styles.nameChangeCard}>
-                <View style={styles.nameChangeInfo}>
-                  <View style={styles.nameChangeAvatar}>
-                    <UserCog size={20} color={Colors.info} />
+              <ChevronRight color={Colors.textMuted} size={24} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.commissionsLink}
+              onPress={() => router.push('/admin/social-media')}
+              testID="social-media-button"
+            >
+              <View style={styles.commissionsLinkContent}>
+                <View style={[styles.commissionsIconContainer, { backgroundColor: '#E4405F20' }]}>
+                  <Share2 color="#E4405F" size={24} />
+                </View>
+                <View style={styles.commissionsTextContainer}>
+                  <Text style={styles.commissionsLinkTitle}>Sosyal Medya Linkleri</Text>
+                  <Text style={styles.commissionsLinkSubtitle}>
+                    Instagram, LinkedIn, Twitter ve Facebook linklerini yönet
+                  </Text>
+                </View>
+              </View>
+              <ChevronRight color={Colors.textMuted} size={24} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.commissionsLink}
+              onPress={() => router.push('/admin/team')}
+              testID="team-management-button"
+            >
+              <View style={styles.commissionsLinkContent}>
+                <View style={[styles.commissionsIconContainer, { backgroundColor: Colors.info + '20' }]}>
+                  <Briefcase color={Colors.info} size={24} />
+                </View>
+                <View style={styles.commissionsTextContainer}>
+                  <Text style={styles.commissionsLinkTitle}>Danışman Ekibi</Text>
+                  <Text style={styles.commissionsLinkSubtitle}>
+                    Ekip üyelerini ekle, düzenle ve yönet
+                  </Text>
+                </View>
+              </View>
+              <ChevronRight color={Colors.textMuted} size={24} />
+            </TouchableOpacity>
+
+            {pendingNameChanges.length > 0 && (
+              <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>İsim Değişikliği Talepleri</Text>
+                  <View style={[styles.pendingBadge, { backgroundColor: Colors.info }]}>
+                    <Text style={styles.pendingBadgeText}>{pendingNameChanges.length}</Text>
                   </View>
-                  <View style={styles.nameChangeDetails}>
-                    <Text style={styles.nameChangeAmbassador}>{request.ambassadorName}</Text>
-                    <View style={styles.nameChangeNames}>
-                      <Text style={styles.nameChangeCurrent}>
-                        {request.currentFirstName} {request.currentLastName}
-                      </Text>
-                      <ArrowRight size={14} color={Colors.textMuted} />
-                      <Text style={styles.nameChangeRequested}>
-                        {request.requestedFirstName} {request.requestedLastName}
-                      </Text>
+                </View>
+                {pendingNameChanges.map((request) => (
+                  <View key={request.id} style={styles.nameChangeCard}>
+                    <View style={styles.nameChangeInfo}>
+                      <View style={styles.nameChangeAvatar}>
+                        <UserCog size={20} color={Colors.info} />
+                      </View>
+                      <View style={styles.nameChangeDetails}>
+                        <Text style={styles.nameChangeAmbassador}>{request.ambassadorName}</Text>
+                        <View style={styles.nameChangeNames}>
+                          <Text style={styles.nameChangeCurrent}>
+                            {request.currentFirstName} {request.currentLastName}
+                          </Text>
+                          <ArrowRight size={14} color={Colors.textMuted} />
+                          <Text style={styles.nameChangeRequested}>
+                            {request.requestedFirstName} {request.requestedLastName}
+                          </Text>
+                        </View>
+                        <Text style={styles.nameChangeDate}>
+                          Talep: {formatDate(request.requestDate)}
+                        </Text>
+                      </View>
                     </View>
-                    <Text style={styles.nameChangeDate}>
-                      Talep: {formatDate(request.requestDate)}
-                    </Text>
+                    <View style={styles.nameChangeActions}>
+                      <TouchableOpacity
+                        style={[styles.actionButton, styles.approveButton]}
+                        onPress={() => handleApproveNameChange(request)}
+                      >
+                        <Check color="#FFFFFF" size={20} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.actionButton, styles.rejectButton]}
+                        onPress={() => handleRejectNameChange(request)}
+                      >
+                        <X color="#FFFFFF" size={20} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {pendingBanks.length > 0 && (
+              <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>Onay Bekleyen Banka Hesapları</Text>
+                  <View style={[styles.pendingBadge, { backgroundColor: Colors.info }]}>
+                    <Text style={styles.pendingBadgeText}>{pendingBanks.length}</Text>
                   </View>
                 </View>
-                <View style={styles.nameChangeActions}>
-                  <TouchableOpacity
-                    style={[styles.actionButton, styles.approveButton]}
-                    onPress={() => handleApproveNameChange(request)}
-                  >
-                    <Check color="#FFFFFF" size={20} />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.actionButton, styles.rejectButton]}
-                    onPress={() => handleRejectNameChange(request)}
-                  >
-                    <X color="#FFFFFF" size={20} />
-                  </TouchableOpacity>
+                {pendingBanks.map((bank) => (
+                  <View key={bank.id} style={styles.pendingCard}>
+                    <View style={styles.pendingInfo}>
+                      <View style={[styles.pendingAvatar, { backgroundColor: Colors.info + '20' }]}>
+                        <CreditCard size={20} color={Colors.info} />
+                      </View>
+                      <View style={styles.pendingDetails}>
+                        <Text style={styles.pendingName}>{bank.ambassadorName}</Text>
+                        <Text style={styles.pendingEmail}>{bank.bankName}</Text>
+                        <Text style={styles.pendingDate}>{bank.iban}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.pendingActions}>
+                      <TouchableOpacity
+                        style={[styles.actionButton, styles.approveButton]}
+                        onPress={() => handleApproveBankAccount(bank.id)}
+                      >
+                        <Check color="#FFFFFF" size={20} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.actionButton, styles.rejectButton]}
+                        onPress={() => handleRejectBankAccount(bank.id)}
+                      >
+                        <X color="#FFFFFF" size={20} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {pendingWithdrawals.length > 0 && (
+              <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>Onay Bekleyen Çekim Talepleri</Text>
+                  <View style={[styles.pendingBadge, { backgroundColor: Colors.secondary }]}>
+                    <Text style={styles.pendingBadgeText}>{pendingWithdrawals.length}</Text>
+                  </View>
                 </View>
+                {pendingWithdrawals.map((withdrawal) => (
+                  <View key={withdrawal.id} style={styles.pendingCard}>
+                    <View style={styles.pendingInfo}>
+                      <View style={[styles.pendingAvatar, { backgroundColor: Colors.secondary + '20' }]}>
+                        <Wallet size={20} color={Colors.secondary} />
+                      </View>
+                      <View style={styles.pendingDetails}>
+                        <Text style={styles.pendingName}>{withdrawal.ambassadorName}</Text>
+                        <Text style={styles.pendingEmail}>
+                          ${withdrawal.amountUSD.toLocaleString()} (₺{withdrawal.amountTRY.toLocaleString()})
+                        </Text>
+                        <Text style={styles.pendingDate}>{withdrawal.bankName} - {withdrawal.iban}</Text>
+                        <Text style={styles.pendingDate}>
+                          Tarih: {formatDate(withdrawal.createdAt)}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.pendingActions}>
+                      <TouchableOpacity
+                        style={[styles.actionButton, styles.approveButton]}
+                        onPress={() => handleApproveWithdrawal(withdrawal.id)}
+                      >
+                        <Check color="#FFFFFF" size={20} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.actionButton, styles.rejectButton]}
+                        onPress={() => handleRejectWithdrawal(withdrawal.id)}
+                      >
+                        <X color="#FFFFFF" size={20} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))}
               </View>
-            ))}
-          </View>
-        )}
+            )}
 
-        {pendingList.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Onay Bekleyen Elçiler</Text>
-              <View style={styles.pendingBadge}>
-                <Text style={styles.pendingBadgeText}>{pendingList.length}</Text>
+            {pendingList.length > 0 && (
+              <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>Onay Bekleyen Elçiler</Text>
+                  <View style={styles.pendingBadge}>
+                    <Text style={styles.pendingBadgeText}>{pendingList.length}</Text>
+                  </View>
+                </View>
+                {pendingList.map(renderPendingAmbassador)}
               </View>
+            )}
+
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Tüm Elçiler</Text>
+              <View style={styles.searchContainer}>
+                <Search color={Colors.textMuted} size={20} />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="İsim, e-posta veya kod ile ara..."
+                  placeholderTextColor={Colors.textMuted}
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  testID="ambassador-search"
+                />
+              </View>
+              {allAmbassadorsQuery.isLoading ? (
+                <ActivityIndicator size="small" color={Colors.primary} style={{ marginVertical: 20 }} />
+              ) : (
+                <View style={styles.ambassadorList}>
+                  {allAmbassadors.map(renderAmbassadorItem)}
+                  {allAmbassadors.length === 0 && (
+                    <Text style={styles.emptyText}>Aktif elçi bulunamadı.</Text>
+                  )}
+                </View>
+              )}
             </View>
-            {pendingList.map(renderPendingAmbassador)}
-          </View>
+          </>
         )}
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Tüm Elçiler</Text>
-          <View style={styles.searchContainer}>
-            <Search color={Colors.textMuted} size={20} />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="İsim, e-posta veya kod ile ara..."
-              placeholderTextColor={Colors.textMuted}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              testID="ambassador-search"
-            />
-          </View>
-          <View style={styles.ambassadorList}>
-            {filteredAmbassadors.map(renderAmbassadorItem)}
-          </View>
-        </View>
       </ScrollView>
     </View>
   );
@@ -494,6 +749,15 @@ const styles = StyleSheet.create({
   contentContainer: {
     padding: 20,
     paddingBottom: 100,
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: Colors.textSecondary,
   },
   statsGrid: {
     flexDirection: 'row',
@@ -732,6 +996,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.textMuted,
     fontFamily: 'monospace',
+  },
+  emptyText: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    paddingVertical: 20,
   },
   accessDenied: {
     flex: 1,
