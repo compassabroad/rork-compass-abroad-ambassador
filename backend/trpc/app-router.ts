@@ -12,6 +12,9 @@ import { financesRouter } from "./routes/finances";
 import { chatRouter } from "./routes/chat";
 import { teamRouter } from "./routes/team";
 import { adminRouter } from "./routes/admin";
+import { programsRouter } from "./routes/programs";
+import { announcementsRouter } from "./routes/announcements";
+import { notificationsRouter } from "./routes/notifications";
 
 export const appRouter = createTRPCRouter({
   email: emailRouter,
@@ -27,6 +30,9 @@ export const appRouter = createTRPCRouter({
   chat: chatRouter,
   team: teamRouter,
   admin: adminRouter,
+  programs: programsRouter,
+  announcements: announcementsRouter,
+  notifications: notificationsRouter,
 });
 
 export type AppRouter = typeof appRouter;

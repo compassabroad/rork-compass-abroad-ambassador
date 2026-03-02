@@ -36,7 +36,8 @@ import {
 import * as Haptics from 'expo-haptics';
 
 import Colors from '@/constants/colors';
-import { MOCK_CURRENT_AMBASSADOR } from '@/mocks/data';
+import { useAuth } from '@/contexts/AuthContext';
+import { trpc } from '@/lib/trpc';
 import { TURKISH_CITIES, SavedIban, BankAccountStatus } from '@/types';
 
 const BANKS = [
@@ -62,13 +63,15 @@ const STATUS_CONFIG: Record<BankAccountStatus, { label: string; color: string; i
 
 export default function ProfileEditScreen() {
   const router = useRouter();
-  const [firstName] = useState(MOCK_CURRENT_AMBASSADOR.firstName);
-  const [lastName] = useState(MOCK_CURRENT_AMBASSADOR.lastName);
-  const [email, setEmail] = useState(MOCK_CURRENT_AMBASSADOR.email);
-  const [phone, setPhone] = useState(MOCK_CURRENT_AMBASSADOR.phone);
-  const [birthDate, setBirthDate] = useState(MOCK_CURRENT_AMBASSADOR.birthDate || '');
-  const [city, setCity] = useState(MOCK_CURRENT_AMBASSADOR.city || '');
-  const [savedIbans, setSavedIbans] = useState<SavedIban[]>(MOCK_CURRENT_AMBASSADOR.savedIbans || []);
+  const { user, token, refreshUser } = useAuth();
+
+  const [firstName] = useState(user?.firstName || '');
+  const [lastName] = useState(user?.lastName || '');
+  const [email, setEmail] = useState(user?.email || '');
+  const [phone, setPhone] = useState(user?.phone || '');
+  const [birthDate, setBirthDate] = useState(user?.birthDate || '');
+  const [city, setCity] = useState(user?.city || '');
+  const [savedIbans, setSavedIbans] = useState<SavedIban[]>([]);
   
   const [showCityPicker, setShowCityPicker] = useState(false);
   const [showAddBankModal, setShowAddBankModal] = useState(false);
@@ -77,14 +80,39 @@ export default function ProfileEditScreen() {
   const [newIban, setNewIban] = useState('');
   const [showBankPicker, setShowBankPicker] = useState(false);
   const [ibanError, setIbanError] = useState('');
-  const [profilePhoto, setProfilePhoto] = useState<string | null>(MOCK_CURRENT_AMBASSADOR.profilePhoto || null);
+  const [profilePhoto, setProfilePhoto] = useState<string | null>(user?.profilePhoto || null);
 
   const [pendingFirstName, setPendingFirstName] = useState(firstName);
   const [pendingLastName, setPendingLastName] = useState(lastName);
 
-  const originalFirstName = MOCK_CURRENT_AMBASSADOR.firstName;
-  const originalLastName = MOCK_CURRENT_AMBASSADOR.lastName;
-  const tcIdentity = MOCK_CURRENT_AMBASSADOR.tcIdentity || '';
+  const originalFirstName = user?.firstName || '';
+  const originalLastName = user?.lastName || '';
+  const tcIdentity = user?.tcIdentity || '';
+
+  const bankAccountsQuery = trpc.bankAccounts.list.useQuery(
+    { token: token || '' },
+    { enabled: !!token }
+  );
+
+  const profileUpdateMutation = trpc.profile.update.useMutation();
+  const nameChangeMutation = trpc.profile.requestNameChange.useMutation();
+  const addBankMutation = trpc.bankAccounts.add.useMutation();
+  const setBankDefaultMutation = trpc.bankAccounts.setDefault.useMutation();
+  const deleteBankMutation = trpc.bankAccounts.delete.useMutation();
+
+  React.useEffect(() => {
+    if (bankAccountsQuery.data) {
+      setSavedIbans(bankAccountsQuery.data.map((b: any) => ({
+        id: b.id,
+        iban: b.iban,
+        bankName: b.bankName,
+        isDefault: b.isDefault,
+        status: b.status,
+        submittedAt: b.submittedAt,
+        approvedAt: b.approvedAt,
+      })));
+    }
+  }, [bankAccountsQuery.data]);
 
   const pickImageFromGallery = async () => {
     try {
@@ -273,7 +301,7 @@ export default function ProfileEditScreen() {
     setIbanError('');
   };
 
-  const handleAddBank = () => {
+  const handleAddBank = async () => {
     if (!newBankName) {
       Alert.alert('Hata', 'Lütfen bir banka seçin');
       return;
@@ -281,47 +309,29 @@ export default function ProfileEditScreen() {
     if (!validateIban(newIban)) {
       return;
     }
-    const existingBank = savedIbans.find(
-      i => i.iban === newIban || (i.bankName === newBankName && i.status !== 'rejected')
-    );
-    if (existingBank) {
-      Alert.alert('Hata', 'Bu banka veya IBAN zaten kayıtlı');
-      return;
+    try {
+      await addBankMutation.mutateAsync({ token: token || '', iban: newIban, bankName: newBankName });
+      setShowAddBankModal(false);
+      resetAddBankForm();
+      bankAccountsQuery.refetch();
+      if (Platform.OS !== 'web') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+      Alert.alert('Banka Hesabı Eklendi', 'Banka hesabınız Compass Abroad admin onayına gönderildi.', [{ text: 'Tamam' }]);
+    } catch (error: any) {
+      Alert.alert('Hata', error.message || 'Banka hesabı eklenemedi');
     }
-    const isFirstAccount = savedIbans.filter(i => i.status === 'approved').length === 0;
-    const newAccount: SavedIban = {
-      id: Date.now().toString(),
-      iban: newIban,
-      bankName: newBankName,
-      isDefault: isFirstAccount,
-      status: 'pending',
-      submittedAt: new Date().toISOString().split('T')[0],
-    };
-    setSavedIbans([...savedIbans, newAccount]);
-    setShowAddBankModal(false);
-    resetAddBankForm();
-    if (Platform.OS !== 'web') {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    }
-    Alert.alert(
-      'Banka Hesabı Eklendi',
-      'Banka hesabınız Compass Abroad admin onayına gönderildi.',
-      [{ text: 'Tamam' }]
-    );
   };
 
-  const handleSetDefault = (ibanId: string) => {
-    const targetIban = savedIbans.find(i => i.id === ibanId);
-    if (!targetIban || targetIban.status !== 'approved') {
-      Alert.alert('Hata', 'Sadece onaylanmış hesaplar varsayılan olarak ayarlanabilir');
-      return;
-    }
-    setSavedIbans(savedIbans.map(iban => ({
-      ...iban,
-      isDefault: iban.id === ibanId,
-    })));
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  const handleSetDefault = async (ibanId: string) => {
+    try {
+      await setBankDefaultMutation.mutateAsync({ token: token || '', bankAccountId: ibanId });
+      bankAccountsQuery.refetch();
+      if (Platform.OS !== 'web') {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      }
+    } catch (error: any) {
+      Alert.alert('Hata', error.message || 'Varsayılan hesap ayarlanamadı');
     }
   };
 
@@ -339,10 +349,15 @@ export default function ProfileEditScreen() {
         { 
           text: 'Sil', 
           style: 'destructive',
-          onPress: () => {
-            setSavedIbans(savedIbans.filter(i => i.id !== ibanId));
-            if (Platform.OS !== 'web') {
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          onPress: async () => {
+            try {
+              await deleteBankMutation.mutateAsync({ token: token || '', bankAccountId: ibanId });
+              bankAccountsQuery.refetch();
+              if (Platform.OS !== 'web') {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              }
+            } catch (error: any) {
+              Alert.alert('Hata', error.message || 'Hesap silinemedi');
             }
           }
         },
@@ -358,40 +373,46 @@ export default function ProfileEditScreen() {
     setShowNameChangeModal(true);
   };
 
-  const submitNameChangeRequest = () => {
+  const submitNameChangeRequest = async () => {
     setShowNameChangeModal(false);
-    if (Platform.OS !== 'web') {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    try {
+      await nameChangeMutation.mutateAsync({
+        token: token || '',
+        requestedFirstName: pendingFirstName,
+        requestedLastName: pendingLastName,
+      });
+      if (Platform.OS !== 'web') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+      Alert.alert(
+        'Talep Oluşturuldu',
+        `İsim değişikliği talebiniz admin onayına gönderildi.\n\nMevcut: ${originalFirstName} ${originalLastName}\nTalep Edilen: ${pendingFirstName} ${pendingLastName}`,
+        [{ text: 'Tamam' }]
+      );
+    } catch (error: any) {
+      Alert.alert('Hata', error.message || 'İsim değişikliği talebi oluşturulamadı');
     }
-    Alert.alert(
-      'Talep Oluşturuldu',
-      `İsim değişikliği talebiniz admin onayına gönderildi.\n\nMevcut: ${originalFirstName} ${originalLastName}\nTalep Edilen: ${pendingFirstName} ${pendingLastName}`,
-      [{ text: 'Tamam' }]
-    );
-    console.log('Name change request submitted:', {
-      currentFirstName: originalFirstName,
-      currentLastName: originalLastName,
-      requestedFirstName: pendingFirstName,
-      requestedLastName: pendingLastName,
-    });
   };
 
   const handleSave = async () => {
-    if (Platform.OS !== 'web') {
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    try {
+      await profileUpdateMutation.mutateAsync({
+        token: token || '',
+        phone,
+        city,
+        birthDate: birthDate || undefined,
+        tcIdentity: tcIdentity || undefined,
+      });
+      await refreshUser();
+      if (Platform.OS !== 'web') {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+      Alert.alert('Başarılı', 'Profil bilgileriniz güncellendi.', [
+        { text: 'Tamam', onPress: () => router.back() }
+      ]);
+    } catch (error: any) {
+      Alert.alert('Hata', error.message || 'Profil güncellenemedi');
     }
-    console.log('Profile saved:', {
-      firstName,
-      lastName,
-      email,
-      phone,
-      birthDate,
-      city,
-      savedIbans,
-    });
-    Alert.alert('Başarılı', 'Profil bilgileriniz güncellendi.', [
-      { text: 'Tamam', onPress: () => router.back() }
-    ]);
   };
 
   return (
@@ -462,11 +483,11 @@ export default function ProfileEditScreen() {
             </TouchableOpacity>
           )}
 
-          {MOCK_CURRENT_AMBASSADOR.pendingFirstName && (
+          {user?.pendingFirstName && (
             <View style={styles.pendingNameBanner}>
               <Clock size={16} color={Colors.warning} />
               <Text style={styles.pendingNameText}>
-                İsim değişikliği onay bekliyor: {MOCK_CURRENT_AMBASSADOR.pendingFirstName} {MOCK_CURRENT_AMBASSADOR.pendingLastName}
+                İsim değişikliği onay bekliyor: {user.pendingFirstName} {user.pendingLastName}
               </Text>
             </View>
           )}

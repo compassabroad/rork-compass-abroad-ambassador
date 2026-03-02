@@ -32,7 +32,7 @@ import { useRouter } from 'expo-router';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { trpc } from '@/lib/trpc';
-import { PROGRAMS } from '@/mocks/data';
+
 import { StudentStage, STAGE_LABELS } from '@/types';
 
 const STAGES: StudentStage[] = ['pre_payment', 'registered', 'documents_completed', 'visa_applied', 'visa_approved', 'visa_rejected', 'orientation', 'departed'];
@@ -174,8 +174,6 @@ export default function StudentsScreen() {
   };
 
   const renderPendingStudent = (student: StudentItem) => {
-    const program = PROGRAMS.find(p => p.id === student.program);
-
     return (
       <View key={student.id} style={styles.pendingCard}>
         <View style={styles.pendingHeader}>
@@ -208,7 +206,7 @@ export default function StudentsScreen() {
         <View style={styles.pendingInfo}>
           <View style={styles.pendingInfoRow}>
             <Text style={styles.pendingInfoLabel}>Program:</Text>
-            <Text style={styles.pendingInfoValue}>{program?.name || student.programName}</Text>
+            <Text style={styles.pendingInfoValue}>{student.programName}</Text>
           </View>
           <View style={styles.pendingInfoRow}>
             <Text style={styles.pendingInfoLabel}>Hedef Ülke:</Text>
@@ -250,7 +248,6 @@ export default function StudentsScreen() {
   };
 
   const renderStudent = (student: StudentItem) => {
-    const program = PROGRAMS.find(p => p.id === student.program);
     const stage = student.stage as StudentStage;
 
     return (
@@ -286,7 +283,7 @@ export default function StudentsScreen() {
 
         <View style={styles.studentBody}>
           <View style={styles.programBadge}>
-            <Text style={styles.programText}>{program?.name || student.programName}</Text>
+            <Text style={styles.programText}>{student.programName}</Text>
           </View>
 
           <View style={styles.stageProgress}>

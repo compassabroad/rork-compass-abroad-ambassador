@@ -28,13 +28,14 @@ import {
 import * as Haptics from 'expo-haptics';
 
 import Colors from '@/constants/colors';
-import { MOCK_CURRENT_AMBASSADOR } from '@/mocks/data';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function StudentInviteScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
-  const referralCode = MOCK_CURRENT_AMBASSADOR.referralCode;
+  const { user } = useAuth();
+  const referralCode = user?.referralCode || 'CA-XXXXXX';
   const referralLink = `https://compassabroad.com/ref/${referralCode}?type=student`;
   const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(referralLink)}&bgcolor=FFFFFF&color=502274`;
 

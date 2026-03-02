@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -22,13 +22,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 import Colors from '@/constants/colors';
 import { useExchangeRate } from '@/contexts/ExchangeRateContext';
-import {
-  PROGRAMS,
-  MOCK_PROGRAM_COMMISSIONS,
-  MOCK_AMBASSADOR_COMMISSIONS,
-  getAmbassadorById,
-} from '@/mocks/data';
-import { AMBASSADOR_TYPE_LABELS, ProgramType } from '@/types';
+import { useAuth } from '@/contexts/AuthContext';
+import { trpc } from '@/lib/trpc';
+import { AMBASSADOR_TYPE_LABELS, AmbassadorType, ProgramType } from '@/types';
 
 interface CommissionOverride {
   customValue: number | null;
@@ -42,33 +38,40 @@ interface CommissionState {
 export default function AmbassadorCommissionsScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const ambassador = getAmbassadorById(id || '');
   const { rate: exchangeRate } = useExchangeRate();
+  const { token } = useAuth();
 
-  const initialState = useMemo(() => {
-    const state: CommissionState = {};
-    PROGRAMS.forEach(program => {
-      const existing = MOCK_AMBASSADOR_COMMISSIONS.find(
-        ac => ac.ambassadorId === id && ac.programId === program.id
-      );
-      state[program.id] = {
-        customValue: existing?.customCommissionUSD ?? null,
-        useCustom: existing?.useCustom ?? false,
-      };
-    });
-    return state;
-  }, [id]);
-
-  const [commissions, setCommissions] = useState<CommissionState>(initialState);
-  const [hasChanges, setHasChanges] = useState(false);
-  const [networkCommissionRate, setNetworkCommissionRate] = useState<number>(
-    ambassador?.networkCommissionRate ?? 10
+  const commissionsQuery = trpc.admin.getAmbassadorCommissions.useQuery(
+    { token: token || '', ambassadorId: id || '' },
+    { enabled: !!token && !!id }
   );
+  const updateCommissionMutation = trpc.admin.updateAmbassadorCommission.useMutation();
+  const updateNetworkRateMutation = trpc.admin.updateNetworkCommissionRate.useMutation();
+
+  const ambassador = commissionsQuery.data?.ambassador;
+  const serverCommissions = commissionsQuery.data?.commissions ?? [];
+
+  const [commissions, setCommissions] = useState<CommissionState>({});
+  const [hasChanges, setHasChanges] = useState(false);
+  const [networkCommissionRate, setNetworkCommissionRate] = useState<number>(10);
+
+  React.useEffect(() => {
+    if (serverCommissions.length > 0) {
+      const state: CommissionState = {};
+      serverCommissions.forEach((c: any) => {
+        state[c.programId] = {
+          customValue: c.customCommissionUSD,
+          useCustom: c.useCustom,
+        };
+      });
+      setCommissions(state);
+    }
+  }, [serverCommissions]);
 
   const getDefaultCommission = useCallback((programId: ProgramType): number => {
-    const pc = MOCK_PROGRAM_COMMISSIONS.find(p => p.programId === programId);
-    return pc?.defaultCommissionUSD ?? 0;
-  }, []);
+    const pc = serverCommissions.find((p: any) => p.programId === programId);
+    return (pc as any)?.defaultCommissionUSD ?? 0;
+  }, [serverCommissions]);
 
   const handleToggleCustom = useCallback((programId: string, value: boolean) => {
     setCommissions(prev => ({
@@ -109,19 +112,44 @@ export default function AmbassadorCommissionsScreen() {
         { text: 'İptal', style: 'cancel' },
         {
           text: 'Kaydet',
-          onPress: () => {
-            console.log('Saving ambassador commissions:', { 
-              ambassadorId: id, 
-              commissions,
-              networkCommissionRate 
-            });
-            setHasChanges(false);
-            Alert.alert('Başarılı', 'Komisyon ayarları kaydedildi.');
+          onPress: async () => {
+            try {
+              for (const [programId, state] of Object.entries(commissions)) {
+                await updateCommissionMutation.mutateAsync({
+                  token: token || '',
+                  ambassadorId: id || '',
+                  programId,
+                  customCommissionUSD: state.useCustom ? state.customValue : null,
+                  useCustom: state.useCustom,
+                });
+              }
+              await updateNetworkRateMutation.mutateAsync({
+                token: token || '',
+                ambassadorId: id || '',
+                rate: networkCommissionRate,
+              });
+              setHasChanges(false);
+              commissionsQuery.refetch();
+              Alert.alert('Başarılı', 'Komisyon ayarları kaydedildi.');
+            } catch (error: any) {
+              Alert.alert('Hata', error.message || 'Kaydetme başarısız');
+            }
           },
         },
       ]
     );
-  }, [ambassador, id, commissions, networkCommissionRate]);
+  }, [ambassador, id, commissions, networkCommissionRate, token, updateCommissionMutation, updateNetworkRateMutation, commissionsQuery]);
+
+  if (commissionsQuery.isLoading) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>Yükleniyor...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (!ambassador) {
     return (
@@ -137,19 +165,19 @@ export default function AmbassadorCommissionsScreen() {
     );
   }
 
-  const renderProgramItem = (program: (typeof PROGRAMS)[0]) => {
-    const state = commissions[program.id];
-    const defaultCommission = getDefaultCommission(program.id);
+  const renderProgramItem = (program: any) => {
+    const state = commissions[program.programId] || { customValue: null, useCustom: false };
+    const defaultCommission = program.defaultCommissionUSD;
     const currentCommission = state.useCustom
       ? (state.customValue ?? defaultCommission)
       : defaultCommission;
     const tryValue = currentCommission * exchangeRate;
 
     return (
-      <View key={program.id} style={styles.programCard}>
+      <View key={program.programId} style={styles.programCard}>
         <View style={styles.programHeader}>
           <View style={styles.programInfo}>
-            <Text style={styles.programName}>{program.name}</Text>
+            <Text style={styles.programName}>{program.programName}</Text>
             <Text style={styles.defaultCommission}>
               Varsayılan: ${defaultCommission}
             </Text>
@@ -158,10 +186,10 @@ export default function AmbassadorCommissionsScreen() {
             <Text style={styles.toggleLabel}>Özel</Text>
             <Switch
               value={state.useCustom}
-              onValueChange={(value) => handleToggleCustom(program.id, value)}
+              onValueChange={(value) => handleToggleCustom(program.programId, value)}
               trackColor={{ false: Colors.border, true: Colors.secondary + '60' }}
               thumbColor={state.useCustom ? Colors.secondary : Colors.textMuted}
-              testID={`toggle-${program.id}`}
+              testID={`toggle-${program.programId}`}
             />
           </View>
         </View>
@@ -182,10 +210,10 @@ export default function AmbassadorCommissionsScreen() {
                   !state.useCustom && styles.inputTextDisabled,
                 ]}
                 value={state.useCustom ? (state.customValue?.toString() || '') : defaultCommission.toString()}
-                onChangeText={(value) => handleCommissionChange(program.id, value)}
+                onChangeText={(value) => handleCommissionChange(program.programId, value)}
                 keyboardType="numeric"
                 editable={state.useCustom}
-                testID={`input-${program.id}`}
+                testID={`input-${program.programId}`}
               />
             </View>
           </View>
@@ -229,7 +257,7 @@ export default function AmbassadorCommissionsScreen() {
       <View style={styles.ambassadorHeader}>
         <View style={styles.ambassadorAvatar}>
           <Text style={styles.ambassadorAvatarText}>
-            {ambassador.name.split(' ').map(n => n[0]).join('')}
+            {ambassador.name.split(' ').map((n: string) => n[0]).join('')}
           </Text>
         </View>
         <View style={styles.ambassadorInfo}>
@@ -239,20 +267,20 @@ export default function AmbassadorCommissionsScreen() {
             <View
               style={[
                 styles.typeBadge,
-                { backgroundColor: AMBASSADOR_TYPE_LABELS[ambassador.type].color + '30' },
+                { backgroundColor: (AMBASSADOR_TYPE_LABELS[(ambassador.type as AmbassadorType) || 'bronze']?.color || '#CD7F32') + '30' },
               ]}
             >
               <Award
-                color={AMBASSADOR_TYPE_LABELS[ambassador.type].color}
+                color={AMBASSADOR_TYPE_LABELS[(ambassador.type as AmbassadorType) || 'bronze']?.color || '#CD7F32'}
                 size={14}
               />
               <Text
                 style={[
                   styles.typeBadgeText,
-                  { color: AMBASSADOR_TYPE_LABELS[ambassador.type].color },
+                  { color: AMBASSADOR_TYPE_LABELS[(ambassador.type as AmbassadorType) || 'bronze']?.color || '#CD7F32' },
                 ]}
               >
-                {AMBASSADOR_TYPE_LABELS[ambassador.type].tr}
+                {AMBASSADOR_TYPE_LABELS[(ambassador.type as AmbassadorType) || 'bronze']?.tr || 'Bronz'}
               </Text>
             </View>
             <Text style={styles.ambassadorCode}>{ambassador.referralCode}</Text>
@@ -300,7 +328,7 @@ export default function AmbassadorCommissionsScreen() {
           Özel oran belirlenmediğinde varsayılan sistem oranları uygulanır.
         </Text>
 
-        {PROGRAMS.map(renderProgramItem)}
+        {serverCommissions.map(renderProgramItem)}
       </ScrollView>
 
       <SafeAreaView edges={['bottom']} style={styles.footer}>

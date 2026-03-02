@@ -27,7 +27,7 @@ import {
 import * as Haptics from 'expo-haptics';
 
 import Colors from '@/constants/colors';
-import { PROGRAMS } from '@/mocks/data';
+import { trpc } from '@/lib/trpc';
 
 interface HowItWorksModalProps {
   visible: boolean;
@@ -45,6 +45,8 @@ const PIPELINE_STAGES = [
 
 export default function HowItWorksModal({ visible, onClose }: HowItWorksModalProps) {
   const insets = useSafeAreaInsets();
+  const programsQuery = trpc.programs.list.useQuery(undefined, { enabled: visible });
+  const PROGRAMS = programsQuery.data ?? [];
 
   const handleClose = async () => {
     if (Platform.OS !== 'web') {
@@ -88,7 +90,7 @@ export default function HowItWorksModal({ visible, onClose }: HowItWorksModalPro
                 Her program için farklı komisyon oranları uygulanır. Öğrenci gittiğinde ana komisyonu kazanırsınız.
               </Text>
               <View style={styles.commissionList}>
-                {PROGRAMS.slice(0, 6).map((program) => (
+                {PROGRAMS.slice(0, 6).map((program: any) => (
                   <View key={program.id} style={styles.commissionItem}>
                     <Text style={styles.commissionName}>{program.name}</Text>
                     <View style={styles.commissionValues}>
@@ -98,7 +100,7 @@ export default function HowItWorksModal({ visible, onClose }: HowItWorksModalPro
                   </View>
                 ))}
                 <View style={styles.morePrograms}>
-                  <Text style={styles.moreProgramsText}>+{PROGRAMS.length - 6} program daha</Text>
+                  <Text style={styles.moreProgramsText}>+{Math.max(0, PROGRAMS.length - 6)} program daha</Text>
                 </View>
               </View>
             </View>

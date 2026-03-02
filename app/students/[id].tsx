@@ -7,6 +7,8 @@ import {
   TouchableOpacity,
   Linking,
   Platform,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -27,20 +29,35 @@ import {
 
 import Colors from '@/constants/colors';
 import { useExchangeRate } from '@/contexts/ExchangeRateContext';
-import { MOCK_STUDENTS, MOCK_STUDENT_PIPELINES, PROGRAMS, MOCK_CURRENT_AMBASSADOR } from '@/mocks/data';
+import { useAuth } from '@/contexts/AuthContext';
+import { trpc } from '@/lib/trpc';
 import { STAGE_LABELS, StudentStage } from '@/types';
-import { calculateCommissionBreakdown, getAmbassadorCommissionForProgram } from '@/utils/commissionCalculator';
 
 export default function StudentDetailScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { token } = useAuth();
 
   const { rate: exchangeRate } = useExchangeRate();
-  
-  const student = MOCK_STUDENTS.find(s => s.id === id);
-  const pipeline = id ? MOCK_STUDENT_PIPELINES[id] : undefined;
-  const program = student ? PROGRAMS.find(p => p.id === student.program) : undefined;
+
+  const studentQuery = trpc.students.getById.useQuery(
+    { token: token || '', studentId: id || '' },
+    { enabled: !!token && !!id }
+  );
+
+  const student = studentQuery.data;
+
+  if (studentQuery.isLoading) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={styles.errorContainer}>
+          <ActivityIndicator size="large" color={Colors.secondary} />
+          <Text style={[styles.errorText, { marginTop: 16 }]}>Yükleniyor...</Text>
+        </View>
+      </View>
+    );
+  }
 
   if (!student) {
     return (
@@ -55,10 +72,10 @@ export default function StudentDetailScreen() {
     );
   }
 
-  const ambassadorId = MOCK_CURRENT_AMBASSADOR.id;
-  const breakdown = calculateCommissionBreakdown(student, ambassadorId);
-  const ambassadorRate = getAmbassadorCommissionForProgram(ambassadorId, student.program);
   const isRejected = student.stage === 'visa_rejected';
+  const totalCommissionUSD = student.commissions.reduce((sum, c) => sum + c.amountUsd, 0);
+  const earnedCommissionUSD = student.commissions.filter(c => c.status === 'completed').reduce((sum, c) => sum + c.amountUsd, 0);
+  const pendingCommissionUSD = student.commissions.filter(c => c.status === 'pending').reduce((sum, c) => sum + c.amountUsd, 0);
 
   const handleCall = () => {
     const phoneUrl = `tel:${student.phone.replace(/\s/g, '')}`;
@@ -76,6 +93,10 @@ export default function StudentDetailScreen() {
   const handleEmail = () => {
     Linking.openURL(`mailto:${student.email}`);
   };
+
+  const PIPELINE_STAGES: StudentStage[] = ['pre_payment', 'registered', 'documents_completed', 'visa_applied', 'visa_approved', 'orientation', 'departed'];
+  const pipelineMap = new Map(student.pipeline.map(p => [p.stage, p]));
+  const currentStageIndex = PIPELINE_STAGES.indexOf(student.stage as StudentStage);
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return '-';
@@ -109,7 +130,7 @@ export default function StudentDetailScreen() {
           </View>
           <Text style={styles.studentName}>{student.name}</Text>
           <View style={styles.programBadge}>
-            <Text style={styles.programText}>{program?.name || student.program}</Text>
+            <Text style={styles.programText}>{student.programName}</Text>
           </View>
         </View>
       </LinearGradient>
@@ -118,6 +139,13 @@ export default function StudentDetailScreen() {
         style={styles.content}
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={studentQuery.isRefetching}
+            onRefresh={() => studentQuery.refetch()}
+            tintColor={Colors.primary}
+          />
+        }
       >
         <View style={styles.infoCard}>
           <Text style={styles.cardTitle}>İletişim Bilgileri</Text>
@@ -158,7 +186,7 @@ export default function StudentDetailScreen() {
             </View>
             <View style={styles.infoContent}>
               <Text style={styles.infoLabel}>Kayıt Tarihi</Text>
-              <Text style={styles.infoValue}>{formatDate(student.registeredAt)}</Text>
+              <Text style={styles.infoValue}>{formatDate(student.createdAt)}</Text>
             </View>
           </View>
         </View>
@@ -174,35 +202,57 @@ export default function StudentDetailScreen() {
           )}
           
           <View style={styles.timeline}>
-            {pipeline?.map((stageData, index) => {
-              const isStageCompleted = stageData.date !== null;
-              const isCurrent = stageData.stage === student.stage;
-              const stageInfo = STAGE_LABELS[stageData.stage as StudentStage];
-              const isStageRejected = stageData.stage === 'visa_rejected' && stageData.isRejected;
+            {PIPELINE_STAGES.map((stageName, index) => {
+              const pipelineEntry = pipelineMap.get(stageName);
+              const stageIndex = PIPELINE_STAGES.indexOf(stageName);
+              const isStageCompleted = pipelineEntry?.date != null || stageIndex < currentStageIndex;
+              const isCurrent = stageName === student.stage;
+              const stageInfo = STAGE_LABELS[stageName];
+              const isStageRejected = stageName === 'visa_rejected' || (isRejected && stageName === 'visa_approved');
               const commissionPercent = stageInfo?.commissionPercent || 0;
               
+              if (stageName === 'visa_approved' && isRejected) {
+                const rejectedEntry = pipelineMap.get('visa_rejected');
+                return (
+                  <View key="visa_rejected" style={styles.timelineItem}>
+                    <View style={styles.timelineLeft}>
+                      <View style={[styles.timelineDot, styles.timelineDotRejected]}>
+                        <XCircle size={16} color={Colors.text} />
+                      </View>
+                      {index < PIPELINE_STAGES.length - 1 && (
+                        <View style={[styles.timelineLine, styles.timelineLineRejected]} />
+                      )}
+                    </View>
+                    <View style={styles.timelineContent}>
+                      <Text style={[styles.timelineStageName, styles.timelineStageNameRejected]}>
+                        {STAGE_LABELS.visa_rejected?.tr || 'Vize Red'}
+                      </Text>
+                      <Text style={styles.timelineDate}>
+                        {rejectedEntry?.date ? formatDate(rejectedEntry.date) : 'Red edildi'}
+                      </Text>
+                    </View>
+                  </View>
+                );
+              }
+              
               return (
-                <View key={stageData.stage} style={styles.timelineItem}>
+                <View key={stageName} style={styles.timelineItem}>
                   <View style={styles.timelineLeft}>
                     <View style={[
                       styles.timelineDot,
-                      isStageCompleted && !isStageRejected && styles.timelineDotCompleted,
-                      isCurrent && !isStageRejected && styles.timelineDotCurrent,
-                      isStageRejected && styles.timelineDotRejected,
+                      isStageCompleted && styles.timelineDotCompleted,
+                      isCurrent && !isRejected && styles.timelineDotCurrent,
                     ]}>
-                      {isStageRejected ? (
-                        <XCircle size={16} color={Colors.text} />
-                      ) : isStageCompleted ? (
+                      {isStageCompleted ? (
                         <CheckCircle size={16} color={Colors.text} />
                       ) : (
                         <Circle size={16} color={Colors.textMuted} />
                       )}
                     </View>
-                    {index < (pipeline?.length ?? 0) - 1 && (
+                    {index < PIPELINE_STAGES.length - 1 && (
                       <View style={[
                         styles.timelineLine,
-                        isStageCompleted && !isStageRejected && styles.timelineLineCompleted,
-                        isStageRejected && styles.timelineLineRejected,
+                        isStageCompleted && styles.timelineLineCompleted,
                       ]} />
                     )}
                   </View>
@@ -211,10 +261,9 @@ export default function StudentDetailScreen() {
                     <View style={styles.timelineHeader}>
                       <Text style={[
                         styles.timelineStageName,
-                        isCurrent && !isStageRejected && styles.timelineStageNameCurrent,
-                        isStageRejected && styles.timelineStageNameRejected,
+                        isCurrent && !isRejected && styles.timelineStageNameCurrent,
                       ]}>
-                        {stageInfo?.tr || stageData.stage}
+                        {stageInfo?.tr || stageName}
                       </Text>
                       {commissionPercent > 0 && (
                         <View style={styles.commissionBadge}>
@@ -223,27 +272,12 @@ export default function StudentDetailScreen() {
                       )}
                     </View>
                     <Text style={styles.timelineDate}>
-                      {stageData.date ? formatDate(stageData.date) : 'Bekliyor'}
+                      {pipelineEntry?.date ? formatDate(pipelineEntry.date) : 'Bekliyor'}
                     </Text>
                   </View>
                 </View>
               );
             })}
-          </View>
-        </View>
-
-        <View style={styles.consultantCard}>
-          <Text style={styles.cardTitle}>Danışman</Text>
-          <View style={styles.consultantInfo}>
-            <View style={styles.consultantAvatar}>
-              <Text style={styles.consultantAvatarText}>
-                {MOCK_CURRENT_AMBASSADOR.name.split(' ').map(n => n[0]).join('')}
-              </Text>
-            </View>
-            <View style={styles.consultantDetails}>
-              <Text style={styles.consultantName}>{MOCK_CURRENT_AMBASSADOR.name}</Text>
-              <Text style={styles.consultantCode}>{MOCK_CURRENT_AMBASSADOR.referralCode}</Text>
-            </View>
           </View>
         </View>
 
@@ -257,43 +291,35 @@ export default function StudentDetailScreen() {
           
           <View style={styles.commissionRateRow}>
             <Text style={styles.commissionRateLabel}>Program:</Text>
-            <Text style={styles.commissionRateValue}>{program?.name}</Text>
+            <Text style={styles.commissionRateValue}>{student.programName}</Text>
           </View>
           <View style={styles.commissionRateRow}>
-            <Text style={styles.commissionRateLabel}>Komisyon Oranınız:</Text>
-            <Text style={styles.commissionRateValue}>${ambassadorRate}</Text>
+            <Text style={styles.commissionRateLabel}>Toplam Komisyon:</Text>
+            <Text style={styles.commissionRateValue}>${totalCommissionUSD}</Text>
           </View>
           
           <View style={styles.commissionDivider} />
           
           <View style={styles.commissionBreakdownRow}>
-            <View style={styles.commissionBreakdownItem}>
-              <Text style={styles.breakdownLabel}>Kayıt (25%)</Text>
-              <Text style={styles.breakdownAmount}>${breakdown.registrationCommissionUSD}</Text>
-              <View style={[styles.breakdownStatus, breakdown.registrationEarned && styles.breakdownStatusEarned]}>
-                <Text style={[styles.breakdownStatusText, breakdown.registrationEarned && styles.breakdownStatusTextEarned]}>
-                  {breakdown.registrationEarned ? '✓ Kazanıldı' : 'Bekliyor'}
-                </Text>
+            {student.commissions.map((c) => {
+              const stageLabel = STAGE_LABELS[c.stage as StudentStage];
+              return (
+                <View key={c.id} style={styles.commissionBreakdownItem}>
+                  <Text style={styles.breakdownLabel}>{stageLabel?.tr || c.stage}</Text>
+                  <Text style={styles.breakdownAmount}>${c.amountUsd}</Text>
+                  <View style={[styles.breakdownStatus, c.status === 'completed' && styles.breakdownStatusEarned]}>
+                    <Text style={[styles.breakdownStatusText, c.status === 'completed' && styles.breakdownStatusTextEarned]}>
+                      {c.status === 'completed' ? '✓ Kazanıldı' : 'Bekliyor'}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })}
+            {student.commissions.length === 0 && (
+              <View style={styles.commissionBreakdownItem}>
+                <Text style={styles.breakdownLabel}>Henüz komisyon yok</Text>
               </View>
-            </View>
-            <View style={styles.commissionBreakdownItem}>
-              <Text style={styles.breakdownLabel}>Vize Onay (25%)</Text>
-              <Text style={styles.breakdownAmount}>${breakdown.visaApprovedCommissionUSD}</Text>
-              <View style={[styles.breakdownStatus, breakdown.visaApprovedEarned && styles.breakdownStatusEarned, isRejected && styles.breakdownStatusRejected]}>
-                <Text style={[styles.breakdownStatusText, breakdown.visaApprovedEarned && styles.breakdownStatusTextEarned, isRejected && styles.breakdownStatusTextRejected]}>
-                  {isRejected ? '✗ Red' : breakdown.visaApprovedEarned ? '✓ Kazanıldı' : 'Bekliyor'}
-                </Text>
-              </View>
-            </View>
-            <View style={styles.commissionBreakdownItem}>
-              <Text style={styles.breakdownLabel}>Uçuş (50%)</Text>
-              <Text style={styles.breakdownAmount}>${breakdown.departedCommissionUSD}</Text>
-              <View style={[styles.breakdownStatus, breakdown.departedEarned && styles.breakdownStatusEarned, isRejected && styles.breakdownStatusRejected]}>
-                <Text style={[styles.breakdownStatusText, breakdown.departedEarned && styles.breakdownStatusTextEarned, isRejected && styles.breakdownStatusTextRejected]}>
-                  {isRejected ? '✗ Red' : breakdown.departedEarned ? '✓ Kazanıldı' : 'Bekliyor'}
-                </Text>
-              </View>
-            </View>
+            )}
           </View>
           
           <View style={styles.commissionDivider} />
@@ -301,15 +327,17 @@ export default function StudentDetailScreen() {
           <View style={styles.commissionTotalRow}>
             <Text style={styles.commissionTotalLabel}>Kazanılan:</Text>
             <View style={styles.commissionTotalAmounts}>
-              <Text style={styles.commissionAmount}>${breakdown.earnedCommissionUSD}</Text>
+              <Text style={styles.commissionAmount}>${earnedCommissionUSD}</Text>
               <Text style={styles.commissionAmountTRY}>
-                ₺{(breakdown.earnedCommissionUSD * exchangeRate).toLocaleString('tr-TR')}
+                ₺{(earnedCommissionUSD * exchangeRate).toLocaleString('tr-TR')}
               </Text>
             </View>
           </View>
-          <Text style={styles.commissionNote}>
-            Toplam potansiyel: ${ambassadorRate} (₺{(ambassadorRate * exchangeRate).toLocaleString('tr-TR')})
-          </Text>
+          {pendingCommissionUSD > 0 && (
+            <Text style={styles.commissionNote}>
+              Bekleyen: ${pendingCommissionUSD} (₺{(pendingCommissionUSD * exchangeRate).toLocaleString('tr-TR')})
+            </Text>
+          )}
         </View>
 
         <View style={styles.contactActions}>

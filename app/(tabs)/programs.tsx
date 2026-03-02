@@ -30,7 +30,7 @@ import {
 
 import Colors from '@/constants/colors';
 import { useExchangeRate } from '@/contexts/ExchangeRateContext';
-import { PROGRAMS } from '@/mocks/data';
+import { trpc } from '@/lib/trpc';
 import { Program } from '@/types';
 
 const ICON_MAP: Record<string, React.ComponentType<{ size: number; color: string }>> = {
@@ -116,8 +116,11 @@ export default function ProgramsScreen() {
   const insets = useSafeAreaInsets();
   const { rate: exchangeRate } = useExchangeRate();
 
-  const totalCommission = PROGRAMS.reduce((sum, p) => sum + p.commission, 0);
-  const avgCommission = Math.round(totalCommission / PROGRAMS.length);
+  const programsQuery = trpc.programs.list.useQuery();
+  const programs = (programsQuery.data ?? []) as Program[];
+
+  const totalCommission = programs.reduce((sum, p) => sum + p.commission, 0);
+  const avgCommission = programs.length > 0 ? Math.round(totalCommission / programs.length) : 0;
 
   return (
     <View style={styles.container}>
@@ -126,12 +129,12 @@ export default function ProgramsScreen() {
         style={[styles.header, { paddingTop: insets.top + 16 }]}
       >
         <Text style={styles.headerTitle}>Programlar</Text>
-        <Text style={styles.headerSubtitle}>13 eğitim programı</Text>
+        <Text style={styles.headerSubtitle}>{programs.length} eğitim programı</Text>
       </LinearGradient>
 
       <View style={styles.summaryContainer}>
         <View style={styles.summaryCard}>
-          <Text style={styles.summaryValue}>{PROGRAMS.length}</Text>
+          <Text style={styles.summaryValue}>{programs.length}</Text>
           <Text style={styles.summaryLabel}>Program</Text>
         </View>
         <View style={styles.summaryDivider} />
@@ -151,7 +154,7 @@ export default function ProgramsScreen() {
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
       >
-        {PROGRAMS.map((program) => (
+        {programs.map((program) => (
           <ProgramCard key={program.id} program={program} exchangeRate={exchangeRate} />
         ))}
         <View style={{ height: 20 }} />

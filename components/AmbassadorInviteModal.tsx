@@ -16,7 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
 import { X, User, Mail, Phone, Link2, Copy, MessageCircle, Share2, Check, ChevronLeft } from 'lucide-react-native';
 import Colors from '@/constants/colors';
-import { MOCK_CURRENT_AMBASSADOR } from '@/mocks/data';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface AmbassadorInviteModalProps {
   visible: boolean;
@@ -29,8 +29,9 @@ export default function AmbassadorInviteModal({ visible, onClose }: AmbassadorIn
   const [phone, setPhone] = useState('');
   const [generatedLink, setGeneratedLink] = useState('');
   const [copied, setCopied] = useState(false);
+  const { user } = useAuth();
 
-  const referralCode = MOCK_CURRENT_AMBASSADOR.referralCode;
+  const referralCode = user?.referralCode || 'CA-XXXXXX';
   const baseUrl = 'https://compass-abroad.com/join';
 
   const resetForm = () => {

@@ -21,7 +21,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 import Colors from '@/constants/colors';
 import { useExchangeRate } from '@/contexts/ExchangeRateContext';
-import { PROGRAMS, MOCK_PROGRAM_COMMISSIONS } from '@/mocks/data';
+import { useAuth } from '@/contexts/AuthContext';
+import { trpc } from '@/lib/trpc';
 
 
 interface CommissionState {
@@ -32,12 +33,26 @@ export default function ProgramCommissionsScreen() {
   const router = useRouter();
   const { rate: exchangeRate, formattedRate } = useExchangeRate();
 
-  const initialCommissions: CommissionState = {};
-  MOCK_PROGRAM_COMMISSIONS.forEach(pc => {
-    initialCommissions[pc.programId] = pc.defaultCommissionUSD;
-  });
+  const { token } = useAuth();
+  const programCommissionsQuery = trpc.admin.getProgramCommissions.useQuery(
+    { token: token || '' },
+    { enabled: !!token }
+  );
+  const updateMutation = trpc.admin.updateProgramCommission.useMutation();
 
-  const [commissions, setCommissions] = useState<CommissionState>(initialCommissions);
+  const programs = programCommissionsQuery.data ?? [];
+
+  const [commissions, setCommissions] = useState<CommissionState>({});
+
+  React.useEffect(() => {
+    if (programs.length > 0) {
+      const initial: CommissionState = {};
+      programs.forEach((pc: any) => {
+        initial[pc.programId] = pc.defaultCommissionUSD;
+      });
+      setCommissions(initial);
+    }
+  }, [programs]);
   const [hasChanges, setHasChanges] = useState(false);
 
   const handleCommissionChange = useCallback((programId: string, value: string) => {
@@ -57,15 +72,22 @@ export default function ProgramCommissionsScreen() {
         { text: 'İptal', style: 'cancel' },
         {
           text: 'Kaydet',
-          onPress: () => {
-            console.log('Saving commissions:', commissions);
-            setHasChanges(false);
-            Alert.alert('Başarılı', 'Komisyon oranları kaydedildi.');
+          onPress: async () => {
+            try {
+              for (const [programId, amount] of Object.entries(commissions)) {
+                await updateMutation.mutateAsync({ token: token || '', programId, commissionUSD: amount });
+              }
+              setHasChanges(false);
+              programCommissionsQuery.refetch();
+              Alert.alert('Başarılı', 'Komisyon oranları kaydedildi.');
+            } catch (error: any) {
+              Alert.alert('Hata', error.message || 'Kaydetme başarısız');
+            }
           },
         },
       ]
     );
-  }, [commissions]);
+  }, [commissions, token, updateMutation, programCommissionsQuery]);
 
   const handleReset = useCallback(() => {
     Alert.alert(
@@ -78,35 +100,34 @@ export default function ProgramCommissionsScreen() {
           style: 'destructive',
           onPress: () => {
             const defaultCommissions: CommissionState = {};
-            PROGRAMS.forEach(p => {
-              defaultCommissions[p.id] = p.commission;
+            programs.forEach((p: any) => {
+              defaultCommissions[p.programId] = p.defaultCommissionUSD;
             });
             setCommissions(defaultCommissions);
             setHasChanges(true);
-            console.log('Reset to defaults');
           },
         },
       ]
     );
-  }, []);
+  }, [programs]);
 
   const getProgramIcon = (iconName: string) => {
     return <DollarSign color={Colors.secondary} size={20} />;
   };
 
-  const renderProgramItem = (program: (typeof PROGRAMS)[0]) => {
-    const currentCommission = commissions[program.id] || program.commission;
+  const renderProgramItem = (program: any) => {
+    const currentCommission = commissions[program.programId] || program.defaultCommissionUSD;
     const tryValue = currentCommission * exchangeRate;
 
     return (
-      <View key={program.id} style={styles.programCard}>
+      <View key={program.programId} style={styles.programCard}>
         <View style={styles.programHeader}>
           <View style={styles.programIconContainer}>
-            {getProgramIcon(program.icon)}
+            {getProgramIcon('')}
           </View>
           <View style={styles.programInfo}>
-            <Text style={styles.programName}>{program.name}</Text>
-            <Text style={styles.programNameEn}>{program.nameEn}</Text>
+            <Text style={styles.programName}>{program.programName}</Text>
+            <Text style={styles.programNameEn}>{program.programNameEn}</Text>
           </View>
         </View>
         <View style={styles.commissionInputs}>
@@ -117,9 +138,9 @@ export default function ProgramCommissionsScreen() {
               <TextInput
                 style={styles.commissionInput}
                 value={currentCommission.toString()}
-                onChangeText={(value) => handleCommissionChange(program.id, value)}
+                onChangeText={(value) => handleCommissionChange(program.programId, value)}
                 keyboardType="numeric"
-                testID={`commission-${program.id}`}
+                testID={`commission-${program.programId}`}
               />
             </View>
           </View>
@@ -178,7 +199,7 @@ export default function ProgramCommissionsScreen() {
           Elçi bazlı özel oranlar için elçi detayına gidin.
         </Text>
 
-        {PROGRAMS.map(renderProgramItem)}
+        {programs.map(renderProgramItem)}
 
         <View style={styles.actionButtons}>
           <TouchableOpacity

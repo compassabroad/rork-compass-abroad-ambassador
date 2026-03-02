@@ -437,6 +437,191 @@ export const adminRouter = createTRPCRouter({
       return { success: true };
     }),
 
+  getProgramCommissions: publicProcedure
+    .input(z.object({ token: z.string() }))
+    .query(async ({ input }) => {
+      console.log("[Admin] Getting program commissions");
+      verifyAdmin(input.token);
+
+      const programs = await dbQuery<{ id: string; name: string; name_en: string; default_commission_usd: number; points: number }>(
+        `SELECT * FROM programs ORDER BY name ASC;`
+      );
+
+      return programs.map(p => ({
+        programId: typeof p.id === 'string' && p.id.includes(':') ? p.id.split(':')[1] : p.id,
+        programName: p.name,
+        programNameEn: p.name_en,
+        defaultCommissionUSD: p.default_commission_usd,
+        points: p.points,
+      }));
+    }),
+
+  updateProgramCommission: publicProcedure
+    .input(z.object({ token: z.string(), programId: z.string(), commissionUSD: z.number() }))
+    .mutation(async ({ input }) => {
+      console.log("[Admin] Updating program commission:", input.programId, "to $" + input.commissionUSD);
+      verifyAdmin(input.token);
+
+      await dbQueryMultiple(
+        `UPDATE programs:${escapeSQL(input.programId)} SET default_commission_usd = ${input.commissionUSD};`
+      );
+
+      return { success: true };
+    }),
+
+  getAmbassadorCommissions: publicProcedure
+    .input(z.object({ token: z.string(), ambassadorId: z.string() }))
+    .query(async ({ input }) => {
+      console.log("[Admin] Getting ambassador commissions for:", input.ambassadorId);
+      verifyAdmin(input.token);
+
+      const ambassador = await dbQuery<AmbassadorRecord>(
+        `SELECT * FROM ambassadors WHERE id = '${escapeSQL(input.ambassadorId)}' OR id = 'ambassadors:${escapeSQL(input.ambassadorId)}' LIMIT 1;`
+      );
+
+      if (ambassador.length === 0) {
+        throw new Error("Elçi bulunamadı");
+      }
+
+      const amb = ambassador[0];
+      const ambId = typeof amb.id === 'string' && amb.id.includes(':') ? amb.id.split(':')[1] : amb.id;
+
+      const customCommissions = await dbQuery<{ id: string; ambassador_id: string; program_id: string; custom_commission_usd: number | null; use_custom: boolean }>(
+        `SELECT * FROM ambassador_commissions WHERE ambassador_id = '${escapeSQL(ambId)}' OR ambassador_id = 'ambassadors:${escapeSQL(ambId)}';`
+      );
+
+      const programs = await dbQuery<{ id: string; name: string; name_en: string; default_commission_usd: number }>(
+        `SELECT * FROM programs ORDER BY name ASC;`
+      );
+
+      return {
+        ambassador: {
+          id: ambId,
+          name: `${amb.first_name} ${amb.last_name}`,
+          email: amb.email,
+          type: amb.type,
+          referralCode: amb.referral_code,
+        },
+        commissions: programs.map(p => {
+          const pid = typeof p.id === 'string' && p.id.includes(':') ? p.id.split(':')[1] : p.id;
+          const custom = customCommissions.find(c => {
+            const cpid = typeof c.program_id === 'string' && c.program_id.includes(':') ? c.program_id.split(':')[1] : c.program_id;
+            return cpid === pid;
+          });
+          return {
+            programId: pid,
+            programName: p.name,
+            programNameEn: p.name_en,
+            defaultCommissionUSD: p.default_commission_usd,
+            customCommissionUSD: custom?.custom_commission_usd ?? null,
+            useCustom: custom?.use_custom ?? false,
+          };
+        }),
+      };
+    }),
+
+  updateAmbassadorCommission: publicProcedure
+    .input(z.object({
+      token: z.string(),
+      ambassadorId: z.string(),
+      programId: z.string(),
+      customCommissionUSD: z.number().nullable(),
+      useCustom: z.boolean(),
+    }))
+    .mutation(async ({ input }) => {
+      console.log("[Admin] Updating ambassador commission:", input.ambassadorId, input.programId);
+      verifyAdmin(input.token);
+
+      const existing = await dbQuery<{ id: string }>(
+        `SELECT * FROM ambassador_commissions WHERE (ambassador_id = '${escapeSQL(input.ambassadorId)}' OR ambassador_id = 'ambassadors:${escapeSQL(input.ambassadorId)}') AND (program_id = '${escapeSQL(input.programId)}' OR program_id = 'programs:${escapeSQL(input.programId)}') LIMIT 1;`
+      );
+
+      if (existing.length > 0) {
+        const existId = typeof existing[0].id === 'string' && existing[0].id.includes(':') ? existing[0].id.split(':')[1] : existing[0].id;
+        const customVal = input.customCommissionUSD !== null ? input.customCommissionUSD.toString() : 'NONE';
+        await dbQueryMultiple(
+          `UPDATE ambassador_commissions:${escapeSQL(existId)} SET custom_commission_usd = ${customVal}, use_custom = ${input.useCustom};`
+        );
+      } else {
+        const newId = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+        const customVal = input.customCommissionUSD !== null ? input.customCommissionUSD.toString() : 'NONE';
+        await dbQueryMultiple(`
+CREATE ambassador_commissions:${newId} SET
+  ambassador_id = '${escapeSQL(input.ambassadorId)}',
+  program_id = 'programs:${escapeSQL(input.programId)}',
+  custom_commission_usd = ${customVal},
+  use_custom = ${input.useCustom};
+`);
+      }
+
+      return { success: true };
+    }),
+
+  updateNetworkCommissionRate: publicProcedure
+    .input(z.object({ token: z.string(), ambassadorId: z.string(), rate: z.number().min(0).max(100) }))
+    .mutation(async ({ input }) => {
+      console.log("[Admin] Updating network commission rate:", input.ambassadorId, input.rate);
+      verifyAdmin(input.token);
+
+      await dbQueryMultiple(
+        `UPDATE ambassadors:${escapeSQL(input.ambassadorId)} SET network_commission_rate = ${input.rate};`
+      );
+
+      return { success: true };
+    }),
+
+  getAmbassadorDetail: publicProcedure
+    .input(z.object({ token: z.string(), ambassadorId: z.string() }))
+    .query(async ({ input }) => {
+      console.log("[Admin] Getting ambassador detail:", input.ambassadorId);
+      verifyAdmin(input.token);
+
+      const results = await dbQuery<AmbassadorRecord & { compass_points: number; network_commission_rate: number; type: string; category: string; sub_type: string; company_name: string | null }>(
+        `SELECT * FROM ambassadors WHERE id = '${escapeSQL(input.ambassadorId)}' OR id = 'ambassadors:${escapeSQL(input.ambassadorId)}' LIMIT 1;`
+      );
+
+      if (results.length === 0) throw new Error("Elçi bulunamadı");
+
+      const amb = results[0];
+      const ambId = typeof amb.id === 'string' && amb.id.includes(':') ? amb.id.split(':')[1] : amb.id;
+
+      const studentCount = await dbQuery<{ count: number }>(
+        `SELECT count() FROM students WHERE ambassador_id = '${escapeSQL(ambId)}' GROUP ALL;`
+      );
+
+      const earningsResult = await dbQuery<{ total: number }>(
+        `SELECT math::sum(amount_usd) as total FROM commissions WHERE ambassador_id = '${escapeSQL(ambId)}' AND status = 'completed' GROUP ALL;`
+      );
+
+      const subAmbassadors = await dbQuery<AmbassadorRecord>(
+        `SELECT * FROM ambassadors WHERE parent_id = '${escapeSQL(ambId)}' OR parent_id = 'ambassadors:${escapeSQL(ambId)}';`
+      );
+
+      return {
+        id: ambId,
+        name: `${amb.first_name} ${amb.last_name}`,
+        firstName: amb.first_name,
+        lastName: amb.last_name,
+        email: amb.email,
+        phone: amb.phone,
+        city: amb.city,
+        type: amb.type,
+        referralCode: amb.referral_code,
+        accountStatus: amb.account_status,
+        compassPoints: (amb as any).compass_points ?? 0,
+        networkCommissionRate: (amb as any).network_commission_rate ?? 10,
+        studentsReferred: studentCount[0]?.count ?? 0,
+        totalEarningsUSD: earningsResult[0]?.total ?? 0,
+        joinedAt: amb.created_at,
+        subAmbassadors: subAmbassadors.map(s => ({
+          id: typeof s.id === 'string' && s.id.includes(':') ? s.id.split(':')[1] : s.id,
+          name: `${s.first_name} ${s.last_name}`,
+          type: s.type,
+          referralCode: s.referral_code,
+        })),
+      };
+    }),
+
   getAllAmbassadors: publicProcedure
     .input(z.object({ token: z.string(), search: z.string().optional() }))
     .query(async ({ input }) => {

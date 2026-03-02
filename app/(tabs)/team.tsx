@@ -24,7 +24,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { trpc } from '@/lib/trpc';
-import { PROGRAMS } from '@/mocks/data';
 import { ProgramType } from '@/types';
 
 interface TeamMemberData {
@@ -70,16 +69,19 @@ export default function TeamScreen() {
     Linking.openURL(whatsappUrl).catch(err => console.log('Error opening WhatsApp:', err));
   }, []);
 
+  const programsQuery = trpc.programs.list.useQuery();
+  const PROGRAMS = programsQuery.data ?? [];
+
   const getProgramName = useCallback((programId: string): string => {
-    const program = PROGRAMS.find(p => p.id === programId);
+    const program = PROGRAMS.find((p: any) => p.id === programId);
     return program?.name || programId;
-  }, []);
+  }, [PROGRAMS]);
 
   const getInitials = (name: string): string => {
     return name.split(' ').map(n => n[0]).join('').toUpperCase();
   };
 
-  const renderFilterChip = (program: (typeof PROGRAMS)[0]) => {
+  const renderFilterChip = (program: any) => {
     const isSelected = selectedFilter === program.id;
     return (
       <TouchableOpacity

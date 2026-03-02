@@ -32,6 +32,8 @@ export interface AuthUser {
   subAmbassadorsCount?: number;
   birthDate?: string | null;
   tcIdentity?: string | null;
+  pendingFirstName?: string | null;
+  pendingLastName?: string | null;
 }
 
 interface RegisterInput {

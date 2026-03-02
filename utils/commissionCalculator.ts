@@ -1,5 +1,4 @@
 import { Student, StudentStage, ProgramType } from '@/types';
-import { PROGRAMS, MOCK_AMBASSADOR_COMMISSIONS } from '@/mocks/data';
 
 export interface CommissionBreakdown {
   totalCommissionUSD: number;
@@ -14,22 +13,28 @@ export interface CommissionBreakdown {
   isRejected: boolean;
 }
 
+const DEFAULT_COMMISSIONS: Record<string, number> = {
+  language_education: 200,
+  bachelor: 800,
+  high_school: 600,
+  internship: 400,
+  work_and_study: 300,
+  visa_consulting: 150,
+  group_summer_school: 250,
+  individual_summer_school: 300,
+  paid_teaching: 350,
+  camp_usa: 250,
+  canada_online_highschool: 450,
+  canada_language: 200,
+  masters: 1000,
+};
+
 export const getAmbassadorCommissionForProgram = (
-  ambassadorId: string,
+  _ambassadorId: string,
   programId: ProgramType
 ): number => {
-  const customCommission = MOCK_AMBASSADOR_COMMISSIONS.find(
-    (ac) => ac.ambassadorId === ambassadorId && ac.programId === programId && ac.useCustom
-  );
-
-  if (customCommission && customCommission.customCommissionUSD !== null) {
-    console.log(`[Commission] Using custom rate for ${ambassadorId}/${programId}: $${customCommission.customCommissionUSD}`);
-    return customCommission.customCommissionUSD;
-  }
-
-  const program = PROGRAMS.find((p) => p.id === programId);
-  const defaultCommission = program?.commission || 0;
-  console.log(`[Commission] Using default rate for ${ambassadorId}/${programId}: $${defaultCommission}`);
+  const defaultCommission = DEFAULT_COMMISSIONS[programId] || 0;
+  console.log(`[Commission] Using default rate for ${programId}: ${defaultCommission}`);
   return defaultCommission;
 };
 

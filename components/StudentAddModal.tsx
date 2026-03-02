@@ -14,8 +14,8 @@ import {
 } from 'react-native';
 import { X, User, Mail, Phone, BookOpen, Globe, FileText, ChevronDown, Send, CheckCircle, Clock } from 'lucide-react-native';
 import Colors from '@/constants/colors';
-import { PROGRAMS, MOCK_CURRENT_AMBASSADOR } from '@/mocks/data';
 import { trpc } from '@/lib/trpc';
+import { useAuth } from '@/contexts/AuthContext';
 import { ProgramType } from '@/types';
 
 interface StudentAddModalProps {
@@ -85,6 +85,9 @@ export default function StudentAddModal({ visible, onClose, onSubmit }: StudentA
   const [showCountryPicker, setShowCountryPicker] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [submittedEmail, setSubmittedEmail] = useState('');
+  const { user } = useAuth();
+  const programsQuery = trpc.programs.list.useQuery();
+  const PROGRAMS = programsQuery.data ?? [];
 
   const sendInvitationMutation = trpc.email.sendStudentInvitation.useMutation({
     onSuccess: () => {
@@ -142,7 +145,7 @@ export default function StudentAddModal({ visible, onClose, onSubmit }: StudentA
         studentName: name.trim(),
         studentEmail: email.trim(),
         invitationToken: token,
-        ambassadorName: MOCK_CURRENT_AMBASSADOR.name,
+        ambassadorName: user ? `${user.firstName} ${user.lastName}` : '',
         program: selectedProgram?.name || program,
       });
 
@@ -346,7 +349,7 @@ export default function StudentAddModal({ visible, onClose, onSubmit }: StudentA
                     key={p.id}
                     style={[styles.pickerOption, program === p.id && styles.pickerOptionSelected]}
                     onPress={() => {
-                      setProgram(p.id);
+                      setProgram(p.id as ProgramType);
                       setShowProgramPicker(false);
                     }}
                   >

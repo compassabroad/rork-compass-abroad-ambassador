@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -18,21 +18,21 @@ import {
 } from 'lucide-react-native';
 
 import Colors from '@/constants/colors';
-import { MOCK_ANNOUNCEMENTS } from '@/mocks/data';
+import { useAuth } from '@/contexts/AuthContext';
+import { trpc } from '@/lib/trpc';
 import { Announcement } from '@/types';
 
 export default function AnnouncementsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const [refreshing, setRefreshing] = useState(false);
-  const [announcements, setAnnouncements] = useState<Announcement[]>(MOCK_ANNOUNCEMENTS);
+  const { token } = useAuth();
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    setTimeout(() => {
-      setRefreshing(false);
-    }, 1000);
-  };
+  const announcementsQuery = trpc.announcements.list.useQuery(
+    { token: token || '' },
+    { enabled: !!token }
+  );
+
+  const announcements = (announcementsQuery.data ?? []) as Announcement[];
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -44,9 +44,6 @@ export default function AnnouncementsScreen() {
   };
 
   const handleAnnouncementPress = (announcement: Announcement) => {
-    setAnnouncements(prev =>
-      prev.map(a => (a.id === announcement.id ? { ...a, read: true } : a))
-    );
     router.push(`/announcements/${announcement.id}`);
   };
 
@@ -105,8 +102,8 @@ export default function AnnouncementsScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
+            refreshing={announcementsQuery.isRefetching}
+            onRefresh={() => announcementsQuery.refetch()}
             tintColor={Colors.primary}
           />
         }

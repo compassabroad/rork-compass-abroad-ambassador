@@ -14,7 +14,7 @@ import {
 import { X, DollarSign, CreditCard, Building2, AlertCircle, CheckCircle, ChevronDown, User, Plus, Save } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useExchangeRate } from '@/contexts/ExchangeRateContext';
-import { MOCK_EARNINGS, MOCK_CURRENT_AMBASSADOR } from '@/mocks/data';
+import { useAuth } from '@/contexts/AuthContext';
 import { SavedIban } from '@/types';
 
 interface PaymentRequestModalProps {
@@ -59,10 +59,11 @@ export default function PaymentRequestModal({ visible, onClose, onSubmit }: Paym
   
   const { rate: exchangeRate, formattedRate } = useExchangeRate();
 
-  const availableUSD = MOCK_EARNINGS.pendingUSD;
+  const { user } = useAuth();
+  const availableUSD = 0;
   const availableTRY = availableUSD * exchangeRate;
-  const savedIbans = useMemo(() => MOCK_CURRENT_AMBASSADOR.savedIbans || [], []);
-  const accountHolderName = MOCK_CURRENT_AMBASSADOR.name;
+  const savedIbans = useMemo<SavedIban[]>(() => [], []);
+  const accountHolderName = user ? `${user.firstName} ${user.lastName}` : '';
 
   const selectedSavedIban = useMemo(() => {
     if (selectedIbanId && selectedIbanId !== 'new') {

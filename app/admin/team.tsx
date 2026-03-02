@@ -31,7 +31,8 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 
 import Colors from '@/constants/colors';
-import { MOCK_TEAM_MEMBERS, PROGRAMS } from '@/mocks/data';
+import { useAuth } from '@/contexts/AuthContext';
+import { trpc } from '@/lib/trpc';
 import { TeamMember, ProgramType, AvailabilityStatus } from '@/types';
 
 const AVAILABILITY_OPTIONS: { value: AvailabilityStatus; label: string; color: string }[] = [
@@ -54,7 +55,17 @@ const LANGUAGE_OPTIONS = [
 
 export default function TeamManagementScreen() {
   const router = useRouter();
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>(MOCK_TEAM_MEMBERS);
+  const { token } = useAuth();
+  const teamQuery = trpc.team.list.useQuery({ token: token || '' }, { enabled: !!token });
+  const programsQuery = trpc.programs.list.useQuery();
+  const PROGRAMS = programsQuery.data ?? [];
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+
+  React.useEffect(() => {
+    if (teamQuery.data) {
+      setTeamMembers(teamQuery.data as TeamMember[]);
+    }
+  }, [teamQuery.data]);
   const [searchQuery, setSearchQuery] = useState('');
   const [modalVisible, setModalVisible] = useState(false);
   const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
@@ -208,7 +219,7 @@ export default function TeamManagementScreen() {
   }, []);
 
   const getProgramName = (programId: ProgramType): string => {
-    const program = PROGRAMS.find((p) => p.id === programId);
+    const program = PROGRAMS.find((p: any) => p.id === programId);
     return program?.name || programId;
   };
 
@@ -497,7 +508,7 @@ export default function TeamManagementScreen() {
                 </TouchableOpacity>
                 {programSelectVisible && (
                   <View style={styles.selectDropdown}>
-                    {PROGRAMS.map((program) => (
+                    {PROGRAMS.map((program: any) => (
                       <TouchableOpacity
                         key={program.id}
                         style={styles.selectItem}

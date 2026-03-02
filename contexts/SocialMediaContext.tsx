@@ -2,12 +2,18 @@ import { useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
 import { SocialMediaLinks } from '@/types';
-import { MOCK_SOCIAL_MEDIA_LINKS } from '@/mocks/data';
+
+const DEFAULT_SOCIAL_MEDIA_LINKS: SocialMediaLinks = {
+  instagram: 'https://instagram.com/compassabroad',
+  linkedin: 'https://linkedin.com/company/compassabroad',
+  twitter: 'https://twitter.com/compassabroad',
+  facebook: 'https://facebook.com/compassabroad',
+};
 
 const STORAGE_KEY = 'social_media_links';
 
 export const [SocialMediaProvider, useSocialMedia] = createContextHook(() => {
-  const [links, setLinks] = useState<SocialMediaLinks>(MOCK_SOCIAL_MEDIA_LINKS);
+  const [links, setLinks] = useState<SocialMediaLinks>(DEFAULT_SOCIAL_MEDIA_LINKS);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -45,8 +51,8 @@ export const [SocialMediaProvider, useSocialMedia] = createContextHook(() => {
 
   const resetLinks = useCallback(async () => {
     try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(MOCK_SOCIAL_MEDIA_LINKS));
-      setLinks(MOCK_SOCIAL_MEDIA_LINKS);
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_SOCIAL_MEDIA_LINKS));
+      setLinks(DEFAULT_SOCIAL_MEDIA_LINKS);
       console.log('Social media links reset to defaults');
       return true;
     } catch (error) {

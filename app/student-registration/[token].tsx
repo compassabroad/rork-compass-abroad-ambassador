@@ -14,7 +14,7 @@ import { useLocalSearchParams, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CheckCircle, Eye, EyeOff, Shield, FileText, Lock, User, Mail, Phone, BookOpen, Globe } from 'lucide-react-native';
 import Colors from '@/constants/colors';
-import { PROGRAMS } from '@/mocks/data';
+import { trpc } from '@/lib/trpc';
 
 const KVKK_LINKS = {
   privacy: 'https://www.compassabroad.com.tr/gizlilik-politikasi/',
@@ -42,23 +42,32 @@ export default function StudentRegistrationScreen() {
   const [consentConsent, setConsentConsent] = useState(false);
   const [completed, setCompleted] = useState(false);
 
-  useEffect(() => {
-    loadStudentData();
-  }, [token]);
+  const studentQuery = trpc.students.getByInvitationToken.useQuery(
+    { invitationToken: token || '' },
+    { enabled: !!token }
+  );
 
-  const loadStudentData = async () => {
-    setLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    setStudentData({
-      name: 'Demo Öğrenci',
-      email: 'demo@email.com',
-      phone: '+90 532 123 4567',
-      program: 'bachelor',
-      country: 'USA',
-    });
-    setLoading(false);
-  };
+  const completeMutation = trpc.students.completeRegistration.useMutation();
+
+  useEffect(() => {
+    if (studentQuery.data) {
+      setStudentData({
+        name: studentQuery.data.name,
+        email: studentQuery.data.email,
+        phone: studentQuery.data.phone,
+        program: studentQuery.data.program,
+        country: studentQuery.data.country || '',
+      });
+      if (studentQuery.data.invitationStatus === 'completed') {
+        setCompleted(true);
+      }
+      setLoading(false);
+    } else if (studentQuery.error) {
+      setLoading(false);
+    } else if (!studentQuery.isLoading) {
+      setLoading(false);
+    }
+  }, [studentQuery.data, studentQuery.error, studentQuery.isLoading]);
 
   const handleOpenLink = (url: string) => {
     Linking.openURL(url).catch(() => {
@@ -90,23 +99,21 @@ export default function StudentRegistrationScreen() {
     if (!validateForm()) return;
 
     setSubmitting(true);
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    console.log('Student registration completed:', {
-      token,
-      password: '***',
-      privacyConsent,
-      kvkkConsent,
-      consentConsent,
-    });
-
-    setSubmitting(false);
-    setCompleted(true);
+    try {
+      await completeMutation.mutateAsync({
+        invitationToken: token || '',
+        kvkkConsent: true,
+      });
+      setCompleted(true);
+    } catch (error: any) {
+      console.error('Registration error:', error);
+      Alert.alert('Hata', error.message || 'Kayıt tamamlanamadı');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const programName = studentData?.program 
-    ? PROGRAMS.find(p => p.id === studentData.program)?.name || studentData.program
-    : '';
+  const programName = studentQuery.data?.programName || studentData?.program || '';
 
   const allConsentsChecked = privacyConsent && kvkkConsent && consentConsent;
 

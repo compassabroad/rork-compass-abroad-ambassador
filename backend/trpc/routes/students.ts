@@ -335,6 +335,86 @@ CREATE students:${studentId} SET
       return { success: true };
     }),
 
+  getByInvitationToken: publicProcedure
+    .input(z.object({ invitationToken: z.string() }))
+    .query(async ({ input }) => {
+      console.log("[Students] getByInvitationToken called:", input.invitationToken);
+
+      const students = await dbQuery<StudentRecord>(
+        `SELECT * FROM students WHERE invitation_token = '${escapeSQL(input.invitationToken)}' LIMIT 1;`
+      );
+
+      if (students.length === 0) {
+        throw new Error("Geçersiz veya süresi dolmuş davet linki");
+      }
+
+      const student = students[0];
+      const programs = await dbQuery<ProgramRecord>(
+        `SELECT * FROM programs:${escapeSQL(student.program)} LIMIT 1;`
+      );
+      const programName = programs.length > 0 ? programs[0].name : student.program;
+
+      return {
+        name: student.name,
+        email: student.email,
+        phone: student.phone,
+        program: student.program,
+        programName,
+        country: student.country,
+        invitationStatus: student.invitation_status,
+      };
+    }),
+
+  completeRegistration: publicProcedure
+    .input(z.object({
+      invitationToken: z.string(),
+      kvkkConsent: z.boolean(),
+    }))
+    .mutation(async ({ input }) => {
+      console.log("[Students] completeRegistration called for token:", input.invitationToken);
+
+      if (!input.kvkkConsent) {
+        throw new Error("KVKK onayı gereklidir");
+      }
+
+      const students = await dbQuery<StudentRecord>(
+        `SELECT * FROM students WHERE invitation_token = '${escapeSQL(input.invitationToken)}' LIMIT 1;`
+      );
+
+      if (students.length === 0) {
+        throw new Error("Geçersiz veya süresi dolmuş davet linki");
+      }
+
+      const student = students[0];
+      const studentId = typeof student.id === 'string' && student.id.includes(':') ? student.id.split(':')[1] : student.id;
+
+      if (student.invitation_status === 'completed') {
+        throw new Error("Bu davet zaten tamamlanmış");
+      }
+
+      const now = nowISO();
+      const newStage = student.stage === 'pre_payment' ? 'registered' : student.stage;
+
+      await dbQueryMultiple(`
+UPDATE students SET invitation_status = 'completed', stage = '${newStage}', updated_at = '${now}' WHERE id = '${escapeSQL(student.id)}';
+`);
+
+      if (newStage !== student.stage) {
+        const pipelineId = generateId();
+        await dbQueryMultiple(`
+CREATE student_pipeline_history:${pipelineId} SET
+  student_id = '${escapeSQL(student.id)}',
+  stage = '${newStage}',
+  date = '${now}',
+  changed_by = 'student',
+  created_at = '${now}';
+`);
+      }
+
+      console.log("[Students] Registration completed for:", student.name);
+      return { success: true, message: "Kayıt tamamlandı!" };
+    }),
+
   getById: publicProcedure
     .input(z.object({
       token: z.string(),

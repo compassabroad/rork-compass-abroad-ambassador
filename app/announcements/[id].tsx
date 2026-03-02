@@ -17,14 +17,22 @@ import {
 } from 'lucide-react-native';
 
 import Colors from '@/constants/colors';
-import { MOCK_ANNOUNCEMENTS } from '@/mocks/data';
+import { useAuth } from '@/contexts/AuthContext';
+import { trpc } from '@/lib/trpc';
 
 export default function AnnouncementDetailScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
 
-  const announcement = MOCK_ANNOUNCEMENTS.find(a => a.id === id);
+  const { token } = useAuth();
+
+  const announcementQuery = trpc.announcements.getById.useQuery(
+    { token: token || '', announcementId: id || '' },
+    { enabled: !!token && !!id }
+  );
+
+  const announcement = announcementQuery.data;
 
   if (!announcement) {
     return (
