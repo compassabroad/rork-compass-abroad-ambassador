@@ -1,19 +1,5 @@
-import Mailjet from "node-mailjet";
 import * as z from "zod";
-
 import { createTRPCRouter, publicProcedure } from "../create-context";
-
-const getMailjetClient = () => {
-  const apiKey = process.env.MAILJET_API_KEY;
-  const apiSecret = process.env.MAILJET_SECRET_KEY;
-  if (!apiKey || !apiSecret) {
-    throw new Error("MAILJET_API_KEY veya MAILJET_SECRET_KEY yapılandırılmamış");
-  }
-  return new Mailjet({
-    apiKey,
-    apiSecret,
-  });
-};
 
 const FROM_EMAIL = process.env.MAILJET_FROM_EMAIL || "noreply@compassabroad.com.tr";
 const FROM_NAME = process.env.MAILJET_FROM_NAME || "Compass Abroad";
@@ -25,9 +11,17 @@ const sendEmail = async (params: {
   htmlBody: string;
   textBody: string;
 }) => {
-  const client = getMailjetClient();
+  const apiKey = process.env.MAILJET_API_KEY;
+  const apiSecret = process.env.MAILJET_SECRET_KEY;
 
-  const data = {
+  if (!apiKey || !apiSecret) {
+    console.error("[Email] MAILJET_API_KEY or MAILJET_SECRET_KEY not configured");
+    throw new Error("MAILJET_API_KEY veya MAILJET_SECRET_KEY yapılandırılmamış");
+  }
+
+  const credentials = btoa(`${apiKey}:${apiSecret}`);
+
+  const body = {
     Messages: [
       {
         From: {
@@ -47,15 +41,30 @@ const sendEmail = async (params: {
     ],
   };
 
-  const result = await client
-    .post("send", { version: "v3.1" })
-    .request(data) as { body?: { Messages?: Array<{ Status?: string; Errors?: unknown[]; To?: Array<{ MessageID?: number }> }> } };
+  console.log("[Email] Sending email to:", params.to);
 
-  const messageResult = result?.body?.Messages?.[0];
+  const response = await fetch("https://api.mailjet.com/v3.1/send", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Basic ${credentials}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  const result = await response.json() as {
+    Messages?: Array<{
+      Status?: string;
+      Errors?: unknown[];
+      To?: Array<{ MessageID?: number }>;
+    }>;
+  };
+
+  const messageResult = result?.Messages?.[0];
   console.log("[Email] Mailjet response status:", messageResult?.Status);
 
-  if (messageResult?.Status === "error") {
-    console.error("[Email] Mailjet error:", JSON.stringify(messageResult.Errors));
+  if (!response.ok || messageResult?.Status === "error") {
+    console.error("[Email] Mailjet error:", JSON.stringify(messageResult?.Errors ?? result));
     throw new Error("E-posta gönderilemedi");
   }
 
