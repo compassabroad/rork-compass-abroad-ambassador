@@ -26,6 +26,12 @@ import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 
+const getBaseUrl = () => {
+  const url = process.env.EXPO_PUBLIC_RORK_API_BASE_URL;
+  if (!url) throw new Error('EXPO_PUBLIC_RORK_API_BASE_URL is not set');
+  return url;
+};
+
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -34,7 +40,28 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSettingUp, setIsSettingUp] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const handleSetupDatabase = async () => {
+    setIsSettingUp(true);
+    Alert.alert('Veritabanı', 'Veritabanı hazırlanıyor...');
+    try {
+      const res = await fetch(`${getBaseUrl()}/api/setup`, { method: 'POST' });
+      const data = await res.json();
+      console.log('[Setup] Response:', JSON.stringify(data));
+      if (data.success) {
+        Alert.alert('Başarılı', 'Veritabanı hazır! Artık giriş yapabilirsiniz.');
+      } else {
+        Alert.alert('Hata', `Kurulum tamamlanamadı: ${data.error || JSON.stringify(data.results)}`);
+      }
+    } catch (err) {
+      console.error('[Setup] Error:', err);
+      Alert.alert('Hata', `Bağlantı hatası: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setIsSettingUp(false);
+    }
+  };
 
   const validateEmail = (value: string): boolean => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -232,6 +259,18 @@ export default function LoginScreen() {
           </TouchableOpacity>
 
           <Text style={styles.copyright}>Compass Abroad © 2024</Text>
+
+          <TouchableOpacity
+            style={styles.setupButton}
+            onPress={handleSetupDatabase}
+            disabled={isSettingUp}
+          >
+            {isSettingUp ? (
+              <ActivityIndicator size="small" color={Colors.textMuted} />
+            ) : (
+              <Text style={styles.setupButtonText}>🔧 Veritabanını Hazırla</Text>
+            )}
+          </TouchableOpacity>
         </ScrollView>
       </LinearGradient>
     </KeyboardAvoidingView>
@@ -419,6 +458,15 @@ const styles = StyleSheet.create({
   copyright: {
     textAlign: 'center',
     fontSize: 12,
+    color: Colors.textMuted,
+  },
+  setupButton: {
+    marginTop: 16,
+    alignItems: 'center',
+    padding: 12,
+  },
+  setupButtonText: {
+    fontSize: 13,
     color: Colors.textMuted,
   },
 });
