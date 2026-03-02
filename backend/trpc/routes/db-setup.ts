@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { createTRPCRouter, publicProcedure } from "../create-context";
 import { dbQueryMultiple, nowISO } from "@/lib/db";
 
@@ -31,6 +32,8 @@ DEFINE FIELD IF NOT EXISTS pending_last_name ON ambassadors TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS name_change_request_date ON ambassadors TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS birth_date ON ambassadors TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS tc_identity ON ambassadors TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS reset_code ON ambassadors TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS reset_code_expires ON ambassadors TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS created_at ON ambassadors TYPE string DEFAULT time::now();
 DEFINE FIELD IF NOT EXISTS updated_at ON ambassadors TYPE string DEFAULT time::now();
 DEFINE INDEX IF NOT EXISTS idx_ambassadors_email ON ambassadors COLUMNS email UNIQUE;
@@ -155,16 +158,11 @@ DEFINE FIELD IF NOT EXISTS created_at ON withdrawal_requests TYPE string DEFAULT
 DEFINE FIELD IF NOT EXISTS processed_at ON withdrawal_requests TYPE option<string>;
 `;
 
-function simpleHash(password: string): string {
-  let hash = 0;
-  for (let i = 0; i < password.length; i++) {
-    const char = password.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash;
-  }
-  const hashStr = Math.abs(hash).toString(16).padStart(8, "0");
-  return `hashed_${hashStr}_${Buffer.from(password).toString("base64")}`;
+function hashPassword(password: string): string {
+  return crypto.createHash('sha256').update(password + 'compass-salt-2024').digest('hex');
 }
+
+export { hashPassword };
 
 const SEED_PROGRAMS_SQL = `
 DELETE FROM programs;
@@ -302,8 +300,8 @@ CREATE programs:masters SET
 
 function getSeedAmbassadorsSQL(): string {
   const now = nowISO();
-  const adminHash = simpleHash("CompAdmin2024!");
-  const testHash = simpleHash("Test1234!");
+  const adminHash = hashPassword("CompAdmin2024!");
+  const testHash = hashPassword("Test1234!");
 
   return `
 DELETE FROM ambassadors;
