@@ -20,6 +20,16 @@ app.use(
   }),
 );
 
+app.post("/setup", async (c) => {
+  const { dbQueryMultiple } = await import("../lib/db");
+  try {
+    const res = await dbQueryMultiple("INFO FOR DB;");
+    return c.json({ success: true });
+  } catch (e) {
+    return c.json({ success: false, error: String(e) });
+  }
+});
+
 app.get("/", (c) => {
   return c.json({ status: "ok", message: "Compass Abroad API is running" });
 });

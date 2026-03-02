@@ -4,7 +4,6 @@ import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useRef } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import Colors from "@/constants/colors";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
@@ -13,6 +12,7 @@ import { ExchangeRateProvider } from "@/contexts/ExchangeRateContext";
 import { SocialMediaProvider } from "@/contexts/SocialMediaContext";
 import { ChatProvider } from "@/contexts/ChatContext";
 import { trpc, trpcClient } from "@/lib/trpc";
+
 
 SplashScreen.preventAutoHideAsync();
 
@@ -176,56 +176,12 @@ function RootLayoutNav() {
   );
 }
 
-const DB_SEED_KEY = 'db_seeded_v2';
-
-function SeedManager() {
-  const seedTriggered = useRef(false);
-
-  const seedMutation = trpc.dbSetup.seedAll.useMutation({
-    onSuccess: async (data) => {
-      console.log('[App] DB seed result:', JSON.stringify(data));
-      try {
-        await AsyncStorage.setItem(DB_SEED_KEY, new Date().toISOString());
-        console.log('[App] DB seed key saved to AsyncStorage');
-      } catch (e) {
-        console.error('[App] Failed to save seed key:', e);
-      }
-    },
-    onError: (err) => {
-      console.error('[App] DB seed mutation error:', err.message);
-    },
-  });
-
-  useEffect(() => {
-    if (seedTriggered.current) return;
-    seedTriggered.current = true;
-
-    (async () => {
-      try {
-        const seeded = await AsyncStorage.getItem(DB_SEED_KEY);
-        if (seeded) {
-          console.log('[App] DB already seeded at:', seeded);
-          return;
-        }
-        console.log('[App] No seed key found. Running seedAll...');
-        seedMutation.mutate();
-      } catch (e) {
-        console.error('[App] Error checking seed status:', e);
-        seedMutation.mutate();
-      }
-    })();
-  }, [seedMutation]);
-
-  return null;
-}
-
 function AppContent() {
   return (
     <ExchangeRateProvider>
       <SocialMediaProvider>
         <NotificationProvider>
           <ChatProvider>
-            <SeedManager />
             <StatusBar style="light" />
             <RootLayoutNav />
           </ChatProvider>
