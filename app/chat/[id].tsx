@@ -59,19 +59,13 @@ export default function ChatDetailScreen() {
     }
   }, [messagesQuery.data]);
 
-  useEffect(() => {
-    setTimeout(() => {
-      scrollViewRef.current?.scrollToEnd({ animated: false });
-    }, 100);
+  const scrollToEndIfNeeded = useCallback(() => {
+    scrollViewRef.current?.scrollToEnd({ animated: true });
   }, []);
 
-  useEffect(() => {
-    if (localMessages.length > 0) {
-      setTimeout(() => {
-        scrollViewRef.current?.scrollToEnd({ animated: true });
-      }, 100);
-    }
-  }, [localMessages.length]);
+  const handleContentSizeChange = useCallback(() => {
+    scrollToEndIfNeeded();
+  }, [scrollToEndIfNeeded]);
 
   const handleSend = useCallback(async () => {
     if (!inputText.trim() || isSending || !token || !id) return;
@@ -229,6 +223,8 @@ export default function ChatDetailScreen() {
         contentContainerStyle={styles.messagesContent}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        onContentSizeChange={handleContentSizeChange}
+        onLayout={handleContentSizeChange}
       >
         {messagesQuery.isLoading ? (
           <View style={styles.loadingContainer}>

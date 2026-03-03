@@ -93,7 +93,7 @@ export const [ChatProvider, useChat] = createContextHook(() => {
 
   const unreadQuery = trpc.chat.getUnreadCount.useQuery(
     { token: token ?? '' },
-    { enabled: !!token && isAuthenticated, refetchInterval: 30000 }
+    { enabled: !!token && isAuthenticated }
   );
 
   useEffect(() => {

@@ -33,14 +33,53 @@ export interface DbResult<T = unknown> {
   result: T;
 }
 
-export async function dbQuery<T = unknown>(sql: string): Promise<T[]> {
+/** Converts a JS value to a SurrealQL literal for safe parameter binding (e.g. in LET $x = value). */
+function toSurrealLiteral(value: unknown): string {
+  if (value === null || value === undefined) {
+    return "NONE";
+  }
+  if (typeof value === "boolean") {
+    return value ? "true" : "false";
+  }
+  if (typeof value === "number") {
+    return String(value);
+  }
+  if (typeof value === "string") {
+    const escaped = value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+    return `'${escaped}'`;
+  }
+  throw new Error("Unsupported parameter type for SurrealQL literal");
+}
+
+/**
+ * Execute a single SurrealQL query with optional parameter binding (SQL injection safe).
+ * Use $paramName in the query and pass { paramName: value } as the second argument.
+ * Example: dbQuery('SELECT * FROM ambassadors WHERE email = $email LIMIT 1;', { email: 'a@b.com' })
+ */
+export async function dbQuery<T = unknown>(
+  sql: string,
+  params?: Record<string, string | number | boolean | null>
+): Promise<T[]> {
   const { endpoint } = getConfig();
-  console.log("[DB] Executing SQL:", sql.substring(0, 200));
+  let body: string;
+  if (params && Object.keys(params).length > 0) {
+    const letStatements = Object.entries(params)
+      .map(([key, val]) => {
+        const safeKey = key.replace(/[^a-zA-Z0-9_]/g, "");
+        if (!safeKey) return "";
+        return `LET $${safeKey} = ${toSurrealLiteral(val)};`;
+      })
+      .filter(Boolean);
+    body = letStatements.join("\n") + "\n" + sql;
+  } else {
+    body = sql;
+  }
+  console.log("[DB] Executing SQL:", body.substring(0, 200));
 
   const response = await fetch(`${endpoint}/sql`, {
     method: "POST",
     headers: getHeaders(true),
-    body: sql,
+    body,
   });
 
   if (!response.ok) {

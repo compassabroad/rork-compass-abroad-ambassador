@@ -1,3 +1,4 @@
+import bcrypt from "bcrypt";
 import { createTRPCRouter, publicProcedure } from "../create-context";
 import { dbQuery, dbQueryMultiple, nowISO } from "@/lib/db";
 
@@ -170,12 +171,14 @@ DEFINE FIELD IF NOT EXISTS phone ON team_members TYPE string;
 DEFINE FIELD IF NOT EXISTS created_at ON team_members TYPE string DEFAULT time::now();
 `;
 
+const SALT_ROUNDS = 10;
+
 async function hashPassword(password: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(password + 'compass-salt-2024');
-  const hashBuffer = await globalThis.crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  return bcrypt.hash(password, SALT_ROUNDS);
+}
+
+export async function verifyPassword(plainPassword: string, hash: string): Promise<boolean> {
+  return bcrypt.compare(plainPassword, hash);
 }
 
 export { hashPassword };

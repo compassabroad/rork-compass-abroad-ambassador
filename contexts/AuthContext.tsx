@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
-import { trpc } from '@/lib/trpc';
+import { trpc, trpcClient } from '@/lib/trpc';
 
 const AUTH_TOKEN_KEY = 'compass_auth_token';
 
@@ -73,52 +73,13 @@ export const [AuthProvider, useAuth] = createContextHook((): AuthState => {
   const loginMutation = trpc.auth.login.useMutation();
   const registerMutation = trpc.auth.register.useMutation();
 
-  const fetchProfile = useCallback(async (authToken: string): Promise<AuthUser | null> => {
+  const fetchProfileWithToken = useCallback(async (authToken: string): Promise<AuthUser | null> => {
     try {
-      console.log('[Auth] Fetching profile with token...');
-      let baseUrl = process.env.EXPO_PUBLIC_RORK_API_BASE_URL;
-      if (!baseUrl) {
-        if (typeof window !== 'undefined' && window.location?.origin) {
-          baseUrl = window.location.origin;
-        } else {
-          console.error('[Auth] API base URL not configured');
-          return null;
-        }
-      }
-
-      const inputPayload = { json: { token: authToken } };
-      const response = await fetch(
-        `${baseUrl}/trpc/auth.me?input=${encodeURIComponent(JSON.stringify(inputPayload))}`,
-        {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        }
-      );
-
-      if (!response.ok) {
-        const text = await response.text();
-        console.error('[Auth] Profile fetch failed:', response.status, text.substring(0, 200));
-        return null;
-      }
-
-      const contentType = response.headers.get('content-type') || '';
-      if (!contentType.includes('application/json')) {
-        const text = await response.text();
-        console.error('[Auth] Non-JSON response:', text.substring(0, 200));
-        return null;
-      }
-
-      const data = await response.json();
-      const result = data?.result?.data?.json ?? data?.result?.data;
-      if (!result) {
-        console.error('[Auth] Invalid profile response:', JSON.stringify(data).substring(0, 300));
-        return null;
-      }
-
-      console.log('[Auth] Profile fetched successfully for:', result.email);
-      return result as AuthUser;
+      console.log('[Auth] Fetching profile via tRPC...');
+      const profile = await trpcClient.auth.me.query({ token: authToken });
+      if (!profile) return null;
+      console.log('[Auth] Profile fetched successfully for:', profile.email);
+      return profile as AuthUser;
     } catch (error) {
       console.error('[Auth] Error fetching profile:', error);
       return null;
@@ -126,6 +87,7 @@ export const [AuthProvider, useAuth] = createContextHook((): AuthState => {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
     const initAuth = async () => {
       try {
         console.log('[Auth] Initializing auth...');
@@ -133,13 +95,14 @@ export const [AuthProvider, useAuth] = createContextHook((): AuthState => {
 
         if (!storedToken) {
           console.log('[Auth] No stored token found');
-          setIsLoading(false);
+          if (!cancelled) setIsLoading(false);
           return;
         }
 
         console.log('[Auth] Found stored token, validating...');
-        const profile = await fetchProfile(storedToken);
+        const profile = await fetchProfileWithToken(storedToken);
 
+        if (cancelled) return;
         if (profile) {
           setToken(storedToken);
           setUser(profile);
@@ -149,15 +112,18 @@ export const [AuthProvider, useAuth] = createContextHook((): AuthState => {
           await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
         }
       } catch (error) {
-        console.error('[Auth] Init error:', error);
-        await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
+        if (!cancelled) {
+          console.error('[Auth] Init error:', error);
+          await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
+        }
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     };
 
     initAuth();
-  }, [fetchProfile]);
+    return () => { cancelled = true; };
+  }, [fetchProfileWithToken]);
 
   const login = useCallback(async (email: string, password: string) => {
     console.log('[Auth] Login attempt for:', email);
@@ -191,7 +157,7 @@ export const [AuthProvider, useAuth] = createContextHook((): AuthState => {
     }
 
     console.log('[Auth] Refreshing user profile...');
-    const profile = await fetchProfile(token);
+    const profile = await fetchProfileWithToken(token);
 
     if (profile) {
       setUser(profile);
@@ -202,7 +168,7 @@ export const [AuthProvider, useAuth] = createContextHook((): AuthState => {
       setToken(null);
       setUser(null);
     }
-  }, [token, fetchProfile]);
+  }, [token, fetchProfileWithToken]);
 
   return {
     user,

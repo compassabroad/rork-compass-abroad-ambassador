@@ -22,39 +22,40 @@ function RootLayoutNav() {
   const { user, isLoading, isAuthenticated } = useAuth();
   const router = useRouter();
   const segments = useSegments();
-  const hasNavigated = useRef(false);
 
   useEffect(() => {
-    if (isLoading) return;
+    if (isLoading) {
+      return;
+    }
 
     SplashScreen.hideAsync();
 
-    const inAuthGroup = segments[0] === 'login' || segments[0] === 'auth' || segments[0] === 'onboarding';
-    const inStudentReg = segments[0] === 'student-registration';
+    const firstSegment = segments[0];
+    const inAuthGroup = firstSegment === 'login' || firstSegment === 'auth' || firstSegment === 'onboarding';
+    const inStudentReg = firstSegment === 'student-registration';
+    const inTabs = firstSegment === '(tabs)';
+    const onPendingApproval = firstSegment === 'auth' && segments[1] === 'pending-approval';
 
     if (inStudentReg) return;
 
     if (!isAuthenticated) {
       if (!inAuthGroup) {
-        console.log('[Nav] Not authenticated, redirecting to login');
         router.replace('/login');
-        hasNavigated.current = true;
       }
-    } else if (user?.accountStatus === 'pending_approval') {
-      if (segments[0] !== 'auth' || segments[1] !== 'pending-approval') {
-        console.log('[Nav] Account pending, redirecting to pending-approval');
-        router.replace('/auth/pending-approval');
-        hasNavigated.current = true;
-      }
-    } else if (user?.accountStatus === 'active') {
-      if (inAuthGroup) {
-        console.log('[Nav] Authenticated and active, redirecting to tabs');
-        router.replace('/(tabs)');
-        hasNavigated.current = true;
-      }
+      return;
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoading, isAuthenticated, user?.accountStatus, segments]);
+
+    if (user?.accountStatus === 'pending_approval') {
+      if (!onPendingApproval) {
+        router.replace('/auth/pending-approval');
+      }
+      return;
+    }
+
+    if (user?.accountStatus === 'active' && inAuthGroup && !inTabs) {
+      router.replace('/(tabs)');
+    }
+  }, [isLoading, isAuthenticated, user?.accountStatus, segments, router]);
 
   return (
     <Stack

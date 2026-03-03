@@ -376,6 +376,7 @@ export default function TeamManagementScreen() {
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.modalOverlay}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
         >
           <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>

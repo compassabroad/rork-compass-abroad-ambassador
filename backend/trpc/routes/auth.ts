@@ -1,35 +1,40 @@
 import * as z from "zod";
+import jwt from "jsonwebtoken";
 import { createTRPCRouter, publicProcedure } from "../create-context";
 import { dbQuery, dbQueryMultiple, generateId, generateReferralCode, nowISO } from "@/lib/db";
-import { hashPassword } from "./db-setup";
+import { hashPassword, verifyPassword } from "./db-setup";
 
 const FROM_EMAIL = process.env.MAILJET_FROM_EMAIL || "noreply@compassabroad.com.tr";
 const FROM_NAME = process.env.MAILJET_FROM_NAME || "Compass Abroad";
 
+const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_EXPIRES_IN = "30d";
+
+function getJwtSecret(): string {
+  if (!JWT_SECRET || JWT_SECRET.length < 16) {
+    throw new Error("JWT_SECRET is not set or too short (min 16 characters) in environment");
+  }
+  return JWT_SECRET;
+}
+
 function createToken(payload: { id: string; email: string; role: string }): string {
-  const tokenData = {
-    id: payload.id,
-    email: payload.email,
-    role: payload.role,
-    exp: Date.now() + 30 * 24 * 60 * 60 * 1000,
-  };
-  return Buffer.from(JSON.stringify(tokenData)).toString("base64");
+  return jwt.sign(
+    { id: payload.id, email: payload.email, role: payload.role },
+    getJwtSecret(),
+    { expiresIn: JWT_EXPIRES_IN }
+  );
 }
 
 function decodeToken(token: string): { id: string; email: string; role: string; exp: number } | null {
   try {
-    const decoded = JSON.parse(Buffer.from(token, "base64").toString("utf-8"));
-    if (!decoded.id || !decoded.email || !decoded.role || !decoded.exp) {
+    const decoded = jwt.verify(token, getJwtSecret()) as { id: string; email: string; role: string; exp: number };
+    if (!decoded.id || !decoded.email || !decoded.role) {
       return null;
     }
     return decoded;
   } catch {
     return null;
   }
-}
-
-function escapeSQL(value: string): string {
-  return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 }
 
 async function sendMailjet(params: {
@@ -139,7 +144,8 @@ export const authRouter = createTRPCRouter({
       console.log("[Auth] Register attempt for:", input.email);
 
       const existing = await dbQuery<AmbassadorRecord>(
-        `SELECT * FROM ambassadors WHERE email = '${escapeSQL(input.email)}' LIMIT 1;`
+        "SELECT * FROM ambassadors WHERE email = $email LIMIT 1;",
+        { email: input.email }
       );
 
       if (existing.length > 0) {
@@ -157,7 +163,8 @@ export const authRouter = createTRPCRouter({
       let attempts = 0;
       while (codeExists && attempts < 10) {
         const check = await dbQuery<AmbassadorRecord>(
-          `SELECT * FROM ambassadors WHERE referral_code = '${referralCode}' LIMIT 1;`
+          "SELECT * FROM ambassadors WHERE referral_code = $referralCode LIMIT 1;",
+          { referralCode }
         );
         if (check.length === 0) {
           codeExists = false;
@@ -167,10 +174,11 @@ export const authRouter = createTRPCRouter({
         }
       }
 
-      let parentId = "NONE";
+      let parentId: string | null = null;
       if (input.parentReferralCode) {
         const parent = await dbQuery<AmbassadorRecord>(
-          `SELECT * FROM ambassadors WHERE referral_code = '${escapeSQL(input.parentReferralCode)}' LIMIT 1;`
+          "SELECT * FROM ambassadors WHERE referral_code = $parentReferralCode LIMIT 1;",
+          { parentReferralCode: input.parentReferralCode }
         );
         if (parent.length === 0) {
           throw new Error("Geçersiz referans kodu");
@@ -178,37 +186,34 @@ export const authRouter = createTRPCRouter({
         if (parent[0].account_status !== "active") {
           throw new Error("Referans veren elçinin hesabı aktif değil");
         }
-        parentId = `'${escapeSQL(parent[0].id)}'`;
+        parentId = parent[0].id;
       }
 
       const now = nowISO();
       const id = generateId();
 
-      const companyNameVal = input.companyName ? `'${escapeSQL(input.companyName)}'` : "NONE";
-      const taxNumberVal = input.taxNumber ? `'${escapeSQL(input.taxNumber)}'` : "NONE";
-      const taxOfficeVal = input.taxOffice ? `'${escapeSQL(input.taxOffice)}'` : "NONE";
-
-      const sql = `CREATE ambassadors:${id} SET
-        email = '${escapeSQL(input.email)}',
-        password_hash = '${escapeSQL(passwordHash)}',
-        first_name = '${escapeSQL(input.firstName)}',
-        last_name = '${escapeSQL(input.lastName)}',
-        phone = '${escapeSQL(input.phone)}',
-        city = '${escapeSQL(input.city)}',
+      await dbQuery(
+        `CREATE ambassadors:$id SET
+        email = $email,
+        password_hash = $password_hash,
+        first_name = $first_name,
+        last_name = $last_name,
+        phone = $phone,
+        city = $city,
         type = 'bronze',
-        category = '${escapeSQL(input.category)}',
-        sub_type = '${escapeSQL(input.subType)}',
-        company_name = ${companyNameVal},
-        tax_number = ${taxNumberVal},
-        tax_office = ${taxOfficeVal},
-        parent_id = ${parentId},
-        referral_code = '${referralCode}',
+        category = $category,
+        sub_type = $sub_type,
+        company_name = $company_name,
+        tax_number = $tax_number,
+        tax_office = $tax_office,
+        parent_id = $parent_id,
+        referral_code = $referral_code,
         account_status = 'pending_approval',
         role = 'ambassador',
         compass_points = 0,
         network_commission_rate = 10,
         kvkk_consent = true,
-        kvkk_consent_date = '${now}',
+        kvkk_consent_date = $now,
         privacy_policy_consent = true,
         terms_consent = true,
         profile_photo = NONE,
@@ -219,10 +224,26 @@ export const authRouter = createTRPCRouter({
         tc_identity = NONE,
         reset_code = NONE,
         reset_code_expires = NONE,
-        created_at = '${now}',
-        updated_at = '${now}';`;
-
-      await dbQueryMultiple(sql);
+        created_at = $now,
+        updated_at = $now;`,
+        {
+          id,
+          email: input.email,
+          password_hash: passwordHash,
+          first_name: input.firstName,
+          last_name: input.lastName,
+          phone: input.phone,
+          city: input.city,
+          category: input.category,
+          sub_type: input.subType,
+          company_name: input.companyName ?? null,
+          tax_number: input.taxNumber ?? null,
+          tax_office: input.taxOffice ?? null,
+          parent_id: parentId,
+          referral_code: referralCode,
+          now,
+        }
+      );
       console.log("[Auth] Ambassador registered successfully:", id);
 
       return {
@@ -245,7 +266,8 @@ export const authRouter = createTRPCRouter({
         let results: AmbassadorRecord[];
         try {
           results = await dbQuery<AmbassadorRecord>(
-            `SELECT * FROM ambassadors WHERE email = '${escapeSQL(input.email)}' LIMIT 1;`
+            "SELECT * FROM ambassadors WHERE email = $email LIMIT 1;",
+            { email: input.email }
           );
         } catch (dbError) {
           console.error("[Auth] DB query failed during login:", dbError);
@@ -257,9 +279,9 @@ export const authRouter = createTRPCRouter({
         }
 
         const ambassador = results[0];
-        const inputHash = await hashPassword(input.password);
+        const passwordValid = await verifyPassword(input.password, ambassador.password_hash);
 
-        if (ambassador.password_hash !== inputHash) {
+        if (!passwordValid) {
           console.log("[Auth] Password mismatch for:", input.email);
           throw new Error("E-posta veya şifre hatalı");
         }
@@ -317,12 +339,9 @@ export const authRouter = createTRPCRouter({
           throw new Error("Geçersiz oturum bilgisi");
         }
 
-        if (decoded.exp < Date.now()) {
-          throw new Error("Oturum süresi dolmuş");
-        }
-
         const results = await dbQuery<AmbassadorRecord>(
-          `SELECT * FROM ambassadors WHERE id = '${escapeSQL(decoded.id)}' LIMIT 1;`
+          "SELECT * FROM ambassadors WHERE id = $id LIMIT 1;",
+          { id: decoded.id }
         );
 
         if (results.length === 0) {
@@ -337,7 +356,8 @@ export const authRouter = createTRPCRouter({
 
         try {
           const studentsResult = await dbQuery<{ count: number }>(
-            `SELECT count() FROM students WHERE ambassador_id = '${escapeSQL(ambassador.id)}' GROUP ALL;`
+            "SELECT count() FROM students WHERE ambassador_id = $ambassador_id GROUP ALL;",
+            { ambassador_id: ambassador.id }
           );
           studentsCount = studentsResult[0]?.count ?? 0;
         } catch (e) {
@@ -346,7 +366,8 @@ export const authRouter = createTRPCRouter({
 
         try {
           const bankAccountsResult = await dbQuery<{ count: number }>(
-            `SELECT count() FROM bank_accounts WHERE ambassador_id = '${escapeSQL(ambassador.id)}' GROUP ALL;`
+            "SELECT count() FROM bank_accounts WHERE ambassador_id = $ambassador_id GROUP ALL;",
+            { ambassador_id: ambassador.id }
           );
           bankAccountsCount = bankAccountsResult[0]?.count ?? 0;
         } catch (e) {
@@ -355,7 +376,8 @@ export const authRouter = createTRPCRouter({
 
         try {
           const subAmbassadorsResult = await dbQuery<{ count: number }>(
-            `SELECT count() FROM ambassadors WHERE parent_id = '${escapeSQL(ambassador.id)}' GROUP ALL;`
+            "SELECT count() FROM ambassadors WHERE parent_id = $parent_id GROUP ALL;",
+            { parent_id: ambassador.id }
           );
           subAmbassadorsCount = subAmbassadorsResult[0]?.count ?? 0;
         } catch (e) {
@@ -414,12 +436,9 @@ export const authRouter = createTRPCRouter({
         throw new Error("Geçersiz oturum bilgisi");
       }
 
-      if (decoded.exp < Date.now()) {
-        throw new Error("Oturum süresi dolmuş");
-      }
-
       const results = await dbQuery<AmbassadorRecord>(
-        `SELECT * FROM ambassadors WHERE id = '${escapeSQL(decoded.id)}' LIMIT 1;`
+        "SELECT * FROM ambassadors WHERE id = $id LIMIT 1;",
+        { id: decoded.id }
       );
 
       if (results.length === 0) {
@@ -427,17 +446,18 @@ export const authRouter = createTRPCRouter({
       }
 
       const ambassador = results[0];
-      const currentHash = await hashPassword(input.currentPassword);
+      const currentValid = await verifyPassword(input.currentPassword, ambassador.password_hash);
 
-      if (ambassador.password_hash !== currentHash) {
+      if (!currentValid) {
         throw new Error("Mevcut şifre hatalı");
       }
 
       const newHash = await hashPassword(input.newPassword);
       const now = nowISO();
 
-      await dbQueryMultiple(
-        `UPDATE ambassadors SET password_hash = '${escapeSQL(newHash)}', updated_at = '${now}' WHERE id = '${escapeSQL(decoded.id)}';`
+      await dbQuery(
+        "UPDATE ambassadors SET password_hash = $password_hash, updated_at = $now WHERE id = $id;",
+        { password_hash: newHash, now, id: decoded.id }
       );
 
       console.log("[Auth] Password changed for:", ambassador.email);
@@ -458,7 +478,8 @@ export const authRouter = createTRPCRouter({
       console.log("[Auth] Forgot password for:", input.email);
 
       const results = await dbQuery<AmbassadorRecord>(
-        `SELECT * FROM ambassadors WHERE email = '${escapeSQL(input.email)}' LIMIT 1;`
+        "SELECT * FROM ambassadors WHERE email = $email LIMIT 1;",
+        { email: input.email }
       );
 
       if (results.length === 0) {
@@ -474,8 +495,9 @@ export const authRouter = createTRPCRouter({
       const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
       const now = nowISO();
 
-      await dbQueryMultiple(
-        `UPDATE ambassadors SET reset_code = '${resetCode}', reset_code_expires = '${expiresAt}', updated_at = '${now}' WHERE id = '${escapeSQL(ambassador.id)}';`
+      await dbQuery(
+        "UPDATE ambassadors SET reset_code = $reset_code, reset_code_expires = $reset_code_expires, updated_at = $now WHERE id = $id;",
+        { reset_code: resetCode, reset_code_expires: expiresAt, now, id: ambassador.id }
       );
 
       try {
@@ -558,7 +580,8 @@ export const authRouter = createTRPCRouter({
       console.log("[Auth] Reset password attempt for:", input.email);
 
       const results = await dbQuery<AmbassadorRecord>(
-        `SELECT * FROM ambassadors WHERE email = '${escapeSQL(input.email)}' LIMIT 1;`
+        "SELECT * FROM ambassadors WHERE email = $email LIMIT 1;",
+        { email: input.email }
       );
 
       if (results.length === 0) {
@@ -578,8 +601,9 @@ export const authRouter = createTRPCRouter({
       const newHash = await hashPassword(input.newPassword);
       const now = nowISO();
 
-      await dbQueryMultiple(
-        `UPDATE ambassadors SET password_hash = '${escapeSQL(newHash)}', reset_code = NONE, reset_code_expires = NONE, updated_at = '${now}' WHERE id = '${escapeSQL(ambassador.id)}';`
+      await dbQuery(
+        "UPDATE ambassadors SET password_hash = $password_hash, reset_code = NONE, reset_code_expires = NONE, updated_at = $now WHERE id = $id;",
+        { password_hash: newHash, now, id: ambassador.id }
       );
 
       console.log("[Auth] Password reset successful for:", ambassador.email);

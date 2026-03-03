@@ -243,6 +243,7 @@ export default function RegisterScreen() {
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
     >
       <LinearGradient
         colors={[Colors.gradient.start, Colors.gradient.middle, Colors.background]}
